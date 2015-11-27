@@ -145,6 +145,55 @@ struct URL {
 	/// The fragment. In web documents, this typically refers to an anchor element.
 	/// For instance, in the URL https://cnn.com/news/story/17774#header2, the fragment is "header2".
 	string fragment;
+
+	string toString() {
+		Appender!string s;
+		s ~= scheme;
+		s ~= "://";
+		if (user) {
+			s ~= user.percentEncode;
+			s ~= ":";
+			s ~= pass.percentEncode;
+			s ~= "@";
+		}
+		s ~= host;
+		if (providedPort) {
+			s ~= ":";
+			s ~= providedPort.to!string;
+		}
+		string p = path;
+		if (!p) {
+			s ~= '/';
+		} else {
+			if (p[0] == '/') {
+				p = p[1..$];
+			}
+			foreach (part; p.split('/')) {
+				s ~= '/';
+				s ~= part.percentEncode;
+			}
+		}
+		if (query) {
+			s ~= '?';
+			bool first = true;
+			foreach (k, v; query) {
+				if (!first) {
+					s ~= '&';
+				}
+				first = false;
+				s ~= k.percentEncode;
+				if (v) {
+					s ~= '=';
+					s ~= v.percentEncode;
+				}
+			}
+		}
+		if (fragment) {
+			s ~= '#';
+			s ~= fragment.percentEncode;
+		}
+		return s.data;
+	}
 }
 
 /**
@@ -250,9 +299,77 @@ bool tryParseURL(string value, out URL url) {
 		}
 	}
 
-	url.fragment = value;
+	try {
+		url.fragment = value.percentDecode;
+	} catch (URLException) {
+		return false;
+	}
 
 	return true;
+}
+
+///
+unittest {
+	{
+		// Basic.
+		URL url;
+		with (url) {
+			scheme = "https";
+			host = "example.org";
+			path = "/foo/bar";
+			query["hello"] = "world";
+			query["gibe"] = "clay";
+			fragment = "frag";
+		}
+		assert(
+				// Not sure what order it'll come out in.
+				url.toString == "https://example.org/foo/bar?hello=world&gibe=clay#frag" ||
+				url.toString == "https://example.org/foo/bar?gibe=clay&hello=world#frag",
+				url.toString);
+	}
+	{
+		// Percent encoded.
+		URL url;
+		with (url) {
+			scheme = "https";
+			host = "example.org";
+			path = "/f☃o";
+			query["❄"] = "❀";
+			query["["] = "]";
+			fragment = "ş";
+		}
+		assert(
+				// Not sure what order it'll come out in.
+				url.toString == "https://example.org/f%E2%98%83o?%E2%9D%84=%E2%9D%80&%5B=%5D#%C5%9F" ||
+				url.toString == "https://example.org/f%E2%98%83o?%5B=%5D&%E2%9D%84=%E2%9D%80#%C5%9F",
+				url.toString);
+	}
+	{
+		// Port, user, pass.
+		URL url;
+		with (url) {
+			scheme = "https";
+			host = "example.org";
+			user = "dhasenan";
+			pass = "itsasecret";
+			port = 17;
+		}
+		assert(
+				url.toString == "https://dhasenan:itsasecret@example.org:17/",
+				url.toString);
+	}
+	{
+		// Query with no path.
+		URL url;
+		with (url) {
+			scheme = "https";
+			host = "example.org";
+			query["hi"] = "bye";
+		}
+		assert(
+				url.toString == "https://example.org/?hi=bye",
+				url.toString);
+	}
 }
 
 /**
@@ -359,12 +476,12 @@ unittest {
 	}
 	{
 		// With URL-encoded values
-		auto u1 = parseURL("https://example.org/%E2%98%83?%E2%9D%84=%3D");
+		auto u1 = parseURL("https://example.org/%E2%98%83?%E2%9D%84=%3D#%5E");
 		assert(u1.scheme == "https");
 		assert(u1.host == "example.org");
 		assert(u1.path == "/☃", "expected path: /☃ actual path: " ~ u1.path);
 		assert(u1.query["❄"] == "=");
-		assert(u1.fragment == "");
+		assert(u1.fragment == "^");
 	}
 }
 
