@@ -1,0 +1,8 @@
+{
+	"name": "urld",
+	"description": "A URL parsing library",
+	"copyright": "Copyright © 2015, dhasenan",
+	"authors": ["dhasenan"],
+	"dependencies": {
+	}
+}
