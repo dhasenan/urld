@@ -159,6 +159,8 @@ struct URL {
 	/// elements will be ["visited": "false"].
 	/// Similarly, in the URL https://bbc.co.uk/news?item, the query string elements will be
 	/// ["item": ""].
+	///
+	/// This field is mutable. (There is no alternative in this case.) So be cautious.
 	string[string] query;
 
 	/// The fragment. In web documents, this typically refers to an anchor element.
@@ -179,11 +181,13 @@ struct URL {
 		}
 		s ~= host;
 		if (providedPort) {
-			s ~= ":";
-			s ~= providedPort.to!string;
+			if ((scheme in schemeToDefaultPort) == null || schemeToDefaultPort[scheme] != providedPort) {
+				s ~= ":";
+				s ~= providedPort.to!string;
+			}
 		}
 		string p = path;
-		if (!p) {
+		if (p.length == 0) {
 			s ~= '/';
 		} else {
 			if (p[0] == '/') {
@@ -214,6 +218,61 @@ struct URL {
 			s ~= fragment.percentEncode;
 		}
 		return s.data;
+	}
+
+	/**
+		* The append operator (~).
+		*
+		* The append operator for URLs returns a new URL with the given string appended as a path
+		* element to the URL's path. It only adds new path elements (or sequences of path elements).
+		*
+		* Don't worry about path separators; whether you include them or not, it will just work.
+		*
+		* Query elements are copied.
+		*
+		* Examples:
+		* ---
+		* auto random = "http://testdata.org/random".parseURL;
+		* auto randInt = random ~ "int";
+		* writeln(randInt);  // prints "http://testdata.org/random/int"
+		* ---
+		*/
+	URL opBinary(string op : "~")(string subsequentPath) {
+		URL other = this;
+		other ~= subsequentPath;
+		if (query) {
+			other.query = other.query.dup;
+		}
+		return other;
+	}
+
+	/**
+		* The append-in-place operator (~=).
+		*
+		* The append operator for URLs adds a path element to this URL. It only adds new path elements
+		* (or sequences of path elements).
+		*
+		* Don't worry about path separators; whether you include them or not, it will just work.
+		*
+		* Examples:
+		* ---
+		* auto random = "http://testdata.org/random".parseURL;
+		* random ~= "int";
+		* writeln(random);  // prints "http://testdata.org/random/int"
+		* ---
+		*/
+	URL opOpAssign(string op : "~")(string subsequentPath) {
+		if (path.endsWith("/") || subsequentPath.startsWith("/")) {
+			if (path.endsWith("/") && subsequentPath.startsWith("/")) {
+				path ~= subsequentPath[1..$];
+			} else {
+				path ~= subsequentPath;
+			}
+		} else {
+			path ~= '/';
+			path ~= subsequentPath;
+		}
+		return this;
 	}
 }
 
@@ -277,7 +336,7 @@ bool tryParseURL(string value, out URL url) {
 			return false;
 		}
 		value = value[end .. $];
-		if (!value) {
+		if (value.length == 0) {
 			return true;
 		}
 	}
@@ -393,6 +452,40 @@ unittest {
 	}
 }
 
+///
+unittest {
+	// There's an existing path.
+	auto url = parseURL("http://example.org/foo");
+	// No slash? Assume it needs a slash.
+	assert((url ~ "bar").toString == "http://example.org/foo/bar");
+	// With slash? Don't add another.
+	assert((url ~ "/bar").toString == "http://example.org/foo/bar");
+	url ~= "bar";
+	assert(url.toString == "http://example.org/foo/bar");
+
+	// Path already ends with a slash; don't add another.
+	url = parseURL("http://example.org/foo/");
+	assert((url ~ "bar").toString == "http://example.org/foo/bar");
+	// Still don't add one even if you're appending with a slash.
+	assert((url ~ "/bar").toString == "http://example.org/foo/bar");
+	url ~= "/bar";
+	assert(url.toString == "http://example.org/foo/bar");
+
+	// No path.
+	url = parseURL("http://example.org");
+	assert((url ~ "bar").toString == "http://example.org/bar");
+	assert((url ~ "/bar").toString == "http://example.org/bar");
+	url ~= "bar";
+	assert(url.toString == "http://example.org/bar");
+
+	// Path is just a slash.
+	url = parseURL("http://example.org/");
+	assert((url ~ "bar").toString == "http://example.org/bar");
+	assert((url ~ "/bar").toString == "http://example.org/bar");
+	url ~= "bar";
+	assert(url.toString == "http://example.org/bar", url.toString);
+}
+
 /**
 	* Parse the input string as a URL.
 	*
@@ -504,6 +597,21 @@ unittest {
 		assert(u1.query["❄"] == "=");
 		assert(u1.fragment == "^");
 	}
+}
+
+unittest {
+	assert(parseURL("http://example.org").port == 80);
+	assert(parseURL("http://example.org:5326").port == 5326);
+
+	auto url = parseURL("redis://admin:password@redisbox.local:2201/path?query=value#fragment");
+	assert(url.scheme == "redis");
+	assert(url.user == "admin");
+	assert(url.pass == "password");
+
+	assert(parseURL("example.org").toString == "http://example.org/");
+	assert(parseURL("http://example.org:80").toString == "http://example.org/");
+
+	assert(parseURL("localhost:8070").toString == "http://localhost:8070/");
 }
 
 /**
