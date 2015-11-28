@@ -19,7 +19,7 @@ No backwards-incompatible changes are planned.
 
 Installation
 ------------
-Add `"urld": "~>0.1.0"` to your `dub.json`.
+Add `"urld": "~>0.2.0"` to your `dub.json`.
 
 Usage
 -----
@@ -41,7 +41,15 @@ with (url) {
 	path = "/serverinfo/info";
 	query["token"] = "my-api-token";
 }
-curl.get(url.toString);
+curl.get(url);
+```
+
+Implicit conversion to strings for use with other libraries that expect URLs as strings:
+
+```D
+import std.net.curl;
+auto couchdbURL = "http://couch.local:8815".parseURL;
+writeln(get(couchdbURL ~ "users/bob.dobbs@subgenius.org"));
 ```
 
 Autodetect ports:

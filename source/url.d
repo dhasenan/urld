@@ -11,11 +11,11 @@
 	* auto url = "ssh://me:password@192.168.0.8/".parseURL;
 	* auto files = system("ssh", url.toString, "ls").splitLines;
 	* foreach (file; files) {
-	*		auto fileURL = url;
-	*		fileURL.path = file;
-	*		system("scp", fileURL.toString, ".");
+	*		system("scp", url ~ file, ".");
 	* }
 	* ---
+	*
+	* License: The MIT license.
 	*/
 module url;
 
@@ -104,9 +104,8 @@ static this() {
 
 /**
 	* A Unique Resource Locator.
-	*
-	* The syntax for URLs is scheme:[//[user:password@]host[:port]][/]path[?query][#fragment].
 	* 
+	* URLs can be parsed (see parseURL) and implicitly convert to strings.
 	*/
 struct URL {
 	/// The URL scheme. For instance, ssh, ftp, or https.
@@ -121,13 +120,16 @@ struct URL {
 	/// The hostname.
 	string host;
 
-	/// The port.
-	/// This is inferred from the scheme if it isn't present in the URL itself.
-	/// If the scheme is not known and the port is not present, the port will be given as 0.
-	/// For some schemes, port will not be sensible -- for instance, file or chrome-extension.
-	///
-	/// If you explicitly need to detect whether the user provided a port, check the providedPort
-	/// field.
+	/**
+	  * The port.
+		*
+	  * This is inferred from the scheme if it isn't present in the URL itself.
+	  * If the scheme is not known and the port is not present, the port will be given as 0.
+	  * For some schemes, port will not be sensible -- for instance, file or chrome-extension.
+	  *
+	  * If you explicitly need to detect whether the user provided a port, check the providedPort
+	  * field.
+	  */
 	@property ushort port() {
 		if (providedPort != 0) {
 			return providedPort;
@@ -138,37 +140,49 @@ struct URL {
 		return 0;
 	}
 
-	/// Set the port.
-	/// This is a shortcut for convenience because you probably don't care about the difference
-	/// between port and providedPort.
+	/**
+	  * Set the port.
+		*
+		* This sets the providedPort field and is provided for convenience.
+		*/
 	@property ushort port(ushort value) {
 		return providedPort = value;
 	}
 
 	/// The port that was explicitly provided in the URL.
-	/// 
 	ushort providedPort;
 
-	/// The path. This excludes the query string.
-	/// For instance, in the URL https://cnn.com/news/story/17774?visited=false, the path is
-	/// "/news/story/17774".
+	/**
+	  * The path.
+	  *
+	  * For instance, in the URL https://cnn.com/news/story/17774?visited=false, the path is
+	  * "/news/story/17774".
+	  */
 	string path;
 
-	/// The query string elements.
-	/// For instance, in the URL https://cnn.com/news/story/17774?visited=false, the query string
-	/// elements will be ["visited": "false"].
-	/// Similarly, in the URL https://bbc.co.uk/news?item, the query string elements will be
-	/// ["item": ""].
-	///
-	/// This field is mutable. (There is no alternative in this case.) So be cautious.
+	/**
+	  * The query string elements.
+	  *
+	  * For instance, in the URL https://cnn.com/news/story/17774?visited=false, the query string
+	  * elements will be ["visited": "false"].
+	  *
+	  * Similarly, in the URL https://bbc.co.uk/news?item, the query string elements will be
+	  * ["item": ""].
+	  *
+	  * This field is mutable, so be cautious.
+	  */
 	string[string] query;
 
-	/// The fragment. In web documents, this typically refers to an anchor element.
-	/// For instance, in the URL https://cnn.com/news/story/17774#header2, the fragment is "header2".
+	/**
+	  * The fragment. In web documents, this typically refers to an anchor element.
+	  * For instance, in the URL https://cnn.com/news/story/17774#header2, the fragment is "header2".
+	  */
 	string fragment;
 
-	/// Convert this URL to a string.
-	/// The string is properly formatted and usable for, eg, a web request.
+	/**
+	  * Convert this URL to a string.
+	  * The string is properly formatted and usable for, eg, a web request.
+	  */
 	string toString() {
 		Appender!string s;
 		s ~= scheme;
@@ -219,6 +233,9 @@ struct URL {
 		}
 		return s.data;
 	}
+
+	/// Implicitly convert URLs to strings.
+	alias toString this;
 
 	/**
 		* The append operator (~).
@@ -484,6 +501,12 @@ unittest {
 	assert((url ~ "/bar").toString == "http://example.org/bar");
 	url ~= "bar";
 	assert(url.toString == "http://example.org/bar", url.toString);
+}
+
+unittest {
+	import std.net.curl;
+	auto url = "http://example.org".parseURL;
+	assert(is(typeof(std.net.curl.get(url))));
 }
 
 /**
