@@ -221,7 +221,7 @@ struct URL {
 				}
 				first = false;
 				s ~= k.percentEncode;
-				if (v) {
+				if (v.length > 0) {
 					s ~= '=';
 					s ~= v.percentEncode;
 				}
@@ -360,7 +360,7 @@ bool tryParseURL(string value, out URL url) {
 
 	i = value.indexOfAny("?#");
 	if (i == -1) {
-		url.path = value;
+		url.path = value.percentDecode;
 		return true;
 	}
 
@@ -467,6 +467,25 @@ unittest {
 				url.toString == "https://example.org/?hi=bye",
 				url.toString);
 	}
+}
+
+unittest {
+	// Percent decoding.
+
+	// http://#:!:@
+	auto urlString = "http://%23:%21%3A@example.org/%7B/%7D?%3B&%26=%3D#%23hash";
+	auto url = urlString.parseURL;
+	assert(url.user == "#");
+	assert(url.pass == "!:");
+	assert(url.host == "example.org");
+	assert(url.path == "/{/}");
+	assert(url.query[";"] == "");
+	assert(url.query["&"] == "=");
+	assert(url.fragment == "#hash");
+
+	// Round trip.
+	assert(urlString == urlString.parseURL.toString, urlString.parseURL.toString);
+	assert(urlString == urlString.parseURL.toString.parseURL.toString);
 }
 
 ///
