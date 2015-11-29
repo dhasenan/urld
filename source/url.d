@@ -201,7 +201,7 @@ struct URL {
 			}
 		}
 		string p = path;
-		if (p.length == 0) {
+		if (p.length == 0 || p == "/") {
 			s ~= '/';
 		} else {
 			if (p[0] == '/') {
@@ -501,6 +501,10 @@ unittest {
 	assert((url ~ "/bar").toString == "http://example.org/bar");
 	url ~= "bar";
 	assert(url.toString == "http://example.org/bar", url.toString);
+
+	// No path, just fragment.
+	url = "ircs://irc.freenode.com/#d".parseURL;
+	assert(url.toString == "ircs://irc.freenode.com/#d", url.toString);
 }
 
 unittest {

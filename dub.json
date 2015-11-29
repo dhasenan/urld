@@ -3,7 +3,7 @@
 	"description": "A URL parsing library",
 	"copyright": "Copyright © 2015, dhasenan",
 	"authors": ["dhasenan"],
-	"license": "MIT; see LICENSE.txt",
+	"license": "MIT",
 	"dependencies": {
 	}
 }
