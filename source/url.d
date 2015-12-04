@@ -768,7 +768,6 @@ ubyte[] percentDecodeRaw(string encoded) {
 	return app.data;
 }
 
-/++
 string toAscii(string unicodeHostname) {
 	bool mustEncode = false;
 	foreach (i, dchar d; unicodeHostname) {
@@ -795,94 +794,134 @@ string toAscii(string unicodeHostname) {
 	return cast(string)result;
 }
 
-string punyEncode(string item, string delimiter = null, string marker = null) {
-	// Puny state machine initial variables.
-	auto base = 36;
-	auto tmin = 1;
-	auto tmax = 26;
-	auto skew = 38;
-	auto damp = 700;
-	auto initialBias = 72;
-	long b = 0;
-
-	bool needToEncode = false;
-	Appender!(char[]) app;
-	app ~= marker;
-	foreach (dchar d; item) {
-		if (d > '~') {  // Max printable ASCII. The DEL char isn't allowed in hostnames.
-			needToEncode = true;
-		} else {
-			app ~= d;
-			b++;
-		}
-	}
-	if (!needToEncode) {
-		return item;
-	}
-	app ~= delimiter;
-
-	// The puny algorithm.
-	// We use 64-bit arithmetic to avoid overflow issues -- unicode only defines up to 0x10FFFF,
-	// and we won't be encoding gigabytes of data, but just to be safe.
-	// Also we use signed values just to make things easier.
-	long delta = 0;
-	long bias = initialBias;
-	long h = b;
-	long lastIndex = 0;
-
-	dchar digitToBasic(ulong digit) {
-		if (digit < 26) {
-			return 'a' + cast(dchar)digit;
-		}
-		return cast(dchar)('0' + (digit - 26));
-	}
+string punyEncode(string input, string delimiter = "-", string marker = "xn--") {
+	ulong base = 36;
+	ulong tmin = 1;
+	ulong tmax = 26;
+	ulong skew = 38;
+	ulong damp = 700;
+	ulong initialBias = 72;
+	dchar initialN = cast(dchar)128;
+	ulong delta = 0;
 
 	ulong adapt(ulong delta, ulong numPoints, bool firstTime) {
-		auto k = 0;
-		delta = firstTime ? (delta / damp) : delta >> 1;
-		delta += (delta / numPoints);
-		for (; delta > (base - tmin) * tmax >> 1; k += base) {
-			delta = (delta / (base - tmin));
+		if (firstTime) {
+			delta /= damp;
+		} else {
+			delta /= 2;
 		}
-		return k + (base - tmin + 1) * delta / (delta + skew);
+		delta += delta / numPoints;
+		ulong k = 0;
+		while (delta > ((base - tmin) * tmax) / 2) {
+			delta /= (base - tmin);
+			k += base;
+		}
+		return k + (((base - tmin + 1) * delta) / (delta + skew));
 	}
 
-	auto f = filter!(x => x >= cast(dchar)128)(item).array;
-	auto uniqueChars = uniq(std.algorithm.sorting.sort(f));
-	foreach (dchar n; uniqueChars) {
-		foreach (dchar c; item) {
+	dchar n = initialN;
+	auto i = 0;
+	auto bias = initialBias;
+	Appender!string output;
+	output ~= marker;
+	auto pushed = 0;
+	auto codePoints = 0;
+	foreach (dchar c; input) {
+		codePoints++;
+		if (c <= initialN) {
+			output ~= c;
+			pushed++;
+		}
+	}
+	if (pushed < codePoints) {
+		if (pushed > 0) {
+			output ~= delimiter;
+		}
+	} else {
+		// No encoding to do.
+		return input;
+	}
+	bool first = true;
+	while (pushed < codePoints) {
+		auto best = dchar.max;
+		foreach (dchar c; input) {
+			if (n <= c && c < best) {
+				best = c;
+			}
+		}
+		if (best == dchar.max) {
+			throw new URLException("failed to find a new codepoint to process during punyencode");
+		}
+		delta += (best - n) * (pushed + 1);
+		if (delta > uint.max) {
+			// TODO better error message
+			throw new URLException("overflow during punyencode");
+		}
+		n = best;
+		foreach (dchar c; input) {
 			if (c < n) {
 				delta++;
-			} else if (c == n) {
-				auto q = delta;
-				for (ulong k = 0; k < cast(ulong)uint.max; k += base) {
-					auto t = k <= bias ? tmin : (k >= bias + tmax ? tmax : k - bias);
+			}
+			if (c == n) {
+				ulong q = delta;
+				auto k = base;
+				while (true) {
+					ulong t;
+					if (k <= bias) {
+						t = tmin;
+					} else if (k >= bias + tmax) {
+						t = tmax;
+					} else {
+						t = k - bias;
+					}
 					if (q < t) {
 						break;
 					}
-					app ~= digitToBasic(t + ((q - t) % (base - t)));
+					output ~= digitToBasic(t + ((q - t) % (base - t)));
 					q = (q - t) / (base - t);
+					k += base;
 				}
-				app ~= digitToBasic(q);
-				bias = adapt(delta, h + 1, h == b);
-				h++;
+				output ~= digitToBasic(q);
+				pushed++;
+				bias = adapt(delta, pushed, first);
+				first = false;
+				delta = 0;
 			}
 		}
 		delta++;
+		n++;
 	}
-	return cast(string)app.data;
+	return cast(string)output.data;
+}
+
+dchar digitToBasic(ulong digit) {
+	return cast(dchar)(digit + 22 + 75 * (digit < 26));
 }
 
 unittest {
-	import std.stdio;
-	auto a = "\u0644\u064A\u0647\u0645\u0627\u0628\u062A\u0643\u0644"
-		~ "\u0645\u0648\u0634\u0639\u0631\u0628\u064A\u061F";
-	writeln(a);
-	writeln(punyEncode(a));
-	assert(punyEncode(a) == "egbpdaj6bu4bxfgehfvwxn");
-}
+	{
+		auto a = "b\u00FCcher";
+		assert(punyEncode(a) == "xn--bcher-kva");
+	}
+	{
+		auto a = "b\u00FCc\u00FCher";
+		assert(punyEncode(a) == "xn--bcher-kvab");
+	}
+	{
+		auto a = "ýbücher";
+		auto b = punyEncode(a);
+		assert(b == "xn--bcher-kvaf", b);
+	}
 
-struct URL {
-	Host host;
+	{
+		auto a = "mañana";
+		assert(punyEncode(a) == "xn--maana-pta");
+	}
+
+	{
+		auto a = "\u0644\u064A\u0647\u0645\u0627\u0628\u062A\u0643\u0644"
+			~ "\u0645\u0648\u0634\u0639\u0631\u0628\u064A\u061F";
+		auto b = punyEncode(a);
+		assert(b == "xn--egbpdaj6bu4bxfgehfvwxn", b);
+	}
 }
-++/
