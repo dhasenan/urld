@@ -11,15 +11,13 @@ which vibe.d doesn't allow.
 
 Status
 ------
-urld does not currently support Unicode domain names.
-
 There are some convenience accessors to add.
 
 No backwards-incompatible changes are planned.
 
 Installation
 ------------
-Add `"urld": "~>0.2.0"` to your `dub.json`.
+Add `"urld": "~>0.3.0"` to your `dub.json`.
 
 Usage
 -----
@@ -42,6 +40,14 @@ with (url) {
 	query["token"] = "my-api-token";
 }
 curl.get(url);
+```
+
+Unicode domain names:
+
+```D
+auto url = "http://☃.com/".parseURL;
+writeln(url.toString);               // http://xn--n3h.com/
+writeln(url.toHumanReadableString);  // http://☃.com/
 ```
 
 Implicit conversion to strings for use with other libraries that expect URLs as strings:
