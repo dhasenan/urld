@@ -184,16 +184,28 @@ struct URL {
 	  * The string is properly formatted and usable for, eg, a web request.
 	  */
 	string toString() {
+		return toString(false);
+	}
+
+	/**
+		* Convert this URL to a string.
+		* The string is intended to be human-readable rather than machine-readable.
+		*/
+	string toHumanReadableString() {
+		return toString(true);
+	}
+
+	private string toString(bool humanReadable) {
 		Appender!string s;
 		s ~= scheme;
 		s ~= "://";
 		if (user) {
-			s ~= user.percentEncode;
+			s ~= humanReadable ? user : user.percentEncode;
 			s ~= ":";
-			s ~= pass.percentEncode;
+			s ~= humanReadable ? pass : pass.percentEncode;
 			s ~= "@";
 		}
-		s ~= host;
+		s ~= humanReadable ? host : host.toPuny;
 		if (providedPort) {
 			if ((scheme in schemeToDefaultPort) == null || schemeToDefaultPort[scheme] != providedPort) {
 				s ~= ":";
@@ -207,9 +219,13 @@ struct URL {
 			if (p[0] == '/') {
 				p = p[1..$];
 			}
-			foreach (part; p.split('/')) {
-				s ~= '/';
-				s ~= part.percentEncode;
+			if (humanReadable) {
+				s ~= p;
+			} else {
+				foreach (part; p.split('/')) {
+					s ~= '/';
+					s ~= part.percentEncode;
+				}
 			}
 		}
 		if (query) {
@@ -298,8 +314,6 @@ struct URL {
 	*
 	* This attempts to parse a wide range of URLs as people might actually type them. Some mistakes
 	* may be made. However, any URL in a correct format will be parsed correctly.
-	*
-	* Punycode is not supported.
 	*/
 bool tryParseURL(string value, out URL url) {
 	url = URL.init;
@@ -316,7 +330,7 @@ bool tryParseURL(string value, out URL url) {
 	i = value.indexOfAny([':', '/']);
 	if (i == -1) {
 		// Just a hostname.
-		url.host = value;
+		url.host = value.fromPuny;
 		return true;
 	}
 
@@ -337,10 +351,10 @@ bool tryParseURL(string value, out URL url) {
 	// It's trying to be a host/port, not a user/pass.
 	i = value.indexOfAny([':', '/']);
 	if (i == -1) {
-		url.host = value;
+		url.host = value.fromPuny;
 		return true;
 	}
-	url.host = value[0..i];
+	url.host = value[0..i].fromPuny;
 	value = value[i .. $];
 	if (value[0] == ':') {
 		auto end = value.indexOf('/');
@@ -486,6 +500,22 @@ unittest {
 	// Round trip.
 	assert(urlString == urlString.parseURL.toString, urlString.parseURL.toString);
 	assert(urlString == urlString.parseURL.toString.parseURL.toString);
+}
+
+unittest {
+	auto url = "https://xn--m3h.xn--n3h.org/?hi=bye".parseURL;
+	assert(url.host == "☂.☃.org", url.host);
+}
+
+unittest {
+	auto url = "https://xn--m3h.xn--n3h.org/?hi=bye".parseURL;
+	assert(url.toString == "https://xn--m3h.xn--n3h.org/?hi=bye", url.toString);
+	assert(url.toHumanReadableString == "https://☂.☃.org/?hi=bye", url.toString);
+}
+
+unittest {
+	auto url = "https://☂.☃.org/?hi=bye".parseURL;
+	assert(url.toString == "https://xn--m3h.xn--n3h.org/?hi=bye");
 }
 
 ///
@@ -768,7 +798,7 @@ ubyte[] percentDecodeRaw(string encoded) {
 	return app.data;
 }
 
-string toAscii(string unicodeHostname) {
+private string toPuny(string unicodeHostname) {
 	bool mustEncode = false;
 	foreach (i, dchar d; unicodeHostname) {
 		auto c = cast(uint) d;
@@ -786,23 +816,23 @@ string toAscii(string unicodeHostname) {
 	if (!mustEncode) {
 		return unicodeHostname;
 	}
-	auto parts = unicodeHostname.split('.');
-	char[] result;
-	foreach (part; parts) {
-		result ~= punyEncode(part);
-	}
-	return cast(string)result;
+	return unicodeHostname.split('.').map!punyEncode.join(".");
 }
 
-string punyEncode(string input, string delimiter = "-", string marker = "xn--") {
-	ulong base = 36;
-	ulong tmin = 1;
-	ulong tmax = 26;
-	ulong skew = 38;
-	ulong damp = 700;
-	ulong initialBias = 72;
-	dchar initialN = cast(dchar)128;
-	ulong delta = 0;
+private string fromPuny(string hostname) {
+	return hostname.split('.').map!punyDecode.join(".");
+}
+
+private {
+	enum delimiter = '-';
+	enum marker = "xn--";
+	enum ulong damp = 700;
+	enum ulong tmin = 1;
+	enum ulong tmax = 26;
+	enum ulong skew = 38;
+	enum ulong base = 36;
+	enum ulong initialBias = 72;
+	enum dchar initialN = cast(dchar)128;
 
 	ulong adapt(ulong delta, ulong numPoints, bool firstTime) {
 		if (firstTime) {
@@ -818,7 +848,24 @@ string punyEncode(string input, string delimiter = "-", string marker = "xn--") 
 		}
 		return k + (((base - tmin + 1) * delta) / (delta + skew));
 	}
+}
 
+/**
+	* Encode the input string using the Punycode algorithm.
+	*
+	* Punycode is used to encode UTF domain name segment. A Punycode-encoded segment will be marked
+	* with "xn--". Each segment is encoded separately. For instance, if you wish to encode "☂.☃.com"
+	* in Punycode, you will get "xn--m3h.xn--n3h.com".
+	*
+	* In order to puny-encode a domain name, you must split it into its components. The following will
+	* typically suffice:
+	* ---
+	* auto domain = "☂.☃.com";
+	* auto encodedDomain = domain.splitter(".").map!(punyEncode).join(".");
+	* ---
+	*/
+string punyEncode(string input) {
+	ulong delta = 0;
 	dchar n = initialN;
 	auto i = 0;
 	auto bias = initialBias;
@@ -894,8 +941,121 @@ string punyEncode(string input, string delimiter = "-", string marker = "xn--") 
 	return cast(string)output.data;
 }
 
-dchar digitToBasic(ulong digit) {
+/**
+	* Decode the input string using the Punycode algorithm.
+	*
+	* Punycode is used to encode UTF domain name segment. A Punycode-encoded segment will be marked
+	* with "xn--". Each segment is encoded separately. For instance, if you wish to encode "☂.☃.com"
+	* in Punycode, you will get "xn--m3h.xn--n3h.com".
+	*
+	* In order to puny-decode a domain name, you must split it into its components. The following will
+	* typically suffice:
+	* ---
+	* auto domain = "xn--m3h.xn--n3h.com";
+	* auto decodedDomain = domain.splitter(".").map!(punyDecode).join(".");
+	* ---
+	*/
+string punyDecode(string input) {
+	if (!input.startsWith(marker)) {
+		return input;
+	}
+	input = input[marker.length..$];
+
+ 	// let n = initial_n
+	dchar n = cast(dchar)128;
+
+ 	// let i = 0
+ 	// let bias = initial_bias
+ 	// let output = an empty string indexed from 0
+	ulong i = 0;
+	auto bias = initialBias;
+	dchar[] output;
+	// This reserves a bit more than necessary, but it should be more efficient overall than just
+	// appending and inserting volo-nolo.
+	output.reserve(input.length);
+
+ 	// consume all code points before the last delimiter (if there is one)
+ 	//   and copy them to output, fail on any non-basic code point
+ 	// if more than zero code points were consumed then consume one more
+ 	//   (which will be the last delimiter)
+	auto end = input.lastIndexOf(delimiter);
+	if (end > -1) {
+		foreach (dchar c; input[0..end]) {
+			output ~= c;
+		}
+		input = input[end+1 .. $];
+	}
+
+ 	// while the input is not exhausted do begin
+	ulong pos = 0;
+	while (pos < input.length) {
+ 	//   let oldi = i
+ 	//   let w = 1
+		auto oldi = i;
+		auto w = 1;
+ 	//   for k = base to infinity in steps of base do begin
+		for (ulong k = base; k < uint.max; k += base) {
+ 	//     consume a code point, or fail if there was none to consume
+			// Note that the input is all ASCII, so we can simply index the input string bytewise.
+			auto c = input[pos];
+			pos++;
+ 	//     let digit = the code point's digit-value, fail if it has none
+			auto digit = basicToDigit(c);
+ 	//     let i = i + digit * w, fail on overflow
+			i += digit * w;
+ 	//     let t = tmin if k <= bias {+ tmin}, or
+ 	//             tmax if k >= bias + tmax, or k - bias otherwise
+			ulong t;
+			if (k <= bias) {
+				t = tmin;
+			} else if (k >= bias + tmax) {
+				t = tmax;
+			} else {
+				t = k - bias;
+			}
+ 	//     if digit < t then break
+			if (digit < t) {
+				break;
+			}
+ 	//     let w = w * (base - t), fail on overflow
+			w *= (base - t);
+ 	//   end
+		}
+ 	//   let bias = adapt(i - oldi, length(output) + 1, test oldi is 0?)
+		bias = adapt(i - oldi, output.length + 1, oldi == 0);
+ 	//   let n = n + i div (length(output) + 1), fail on overflow
+		n += i / (output.length + 1);
+ 	//   let i = i mod (length(output) + 1)
+		i %= (output.length + 1);
+ 	//   {if n is a basic code point then fail}
+		// (We aren't actually going to fail here; it's clear what this means.)
+ 	//   insert n into output at position i
+		output.insertInPlace(i, cast(dchar)n);
+ 	//   increment i
+		i++;
+ 	// end
+	}
+	return output.to!string;
+}
+
+// Lifted from punycode.js.
+private dchar digitToBasic(ulong digit) {
 	return cast(dchar)(digit + 22 + 75 * (digit < 26));
+}
+
+// Lifted from punycode.js.
+private uint basicToDigit(char c) {
+	auto codePoint = cast(uint)c;
+	if (codePoint - 48 < 10) {
+		return codePoint - 22;
+	}
+	if (codePoint - 65 < 26) {
+		return codePoint - 65;
+	}
+	if (codePoint - 97 < 26) {
+		return codePoint - 97;
+	}
+	return base;
 }
 
 unittest {
@@ -923,5 +1083,30 @@ unittest {
 			~ "\u0645\u0648\u0634\u0639\u0631\u0628\u064A\u061F";
 		auto b = punyEncode(a);
 		assert(b == "xn--egbpdaj6bu4bxfgehfvwxn", b);
+	}
+	import std.stdio;
+}
+
+unittest {
+	{
+		auto b = punyDecode("xn--egbpdaj6bu4bxfgehfvwxn");
+		assert(b == "ليهمابتكلموشعربي؟", b);
+	}
+	{
+		assert(punyDecode("xn--maana-pta") == "mañana");
+	}
+}
+
+unittest {
+	import std.string, std.algorithm, std.array, std.range;
+	{
+		auto domain = "xn--m3h.xn--n3h.com";
+		auto decodedDomain = domain.splitter(".").map!(punyDecode).join(".");
+		assert(decodedDomain == "☂.☃.com", decodedDomain);
+	}
+	{
+		auto domain = "☂.☃.com";
+		auto decodedDomain = domain.splitter(".").map!(punyEncode).join(".");
+		assert(decodedDomain == "xn--m3h.xn--n3h.com", decodedDomain);
 	}
 }
