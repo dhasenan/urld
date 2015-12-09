@@ -44,6 +44,7 @@ static this() {
 		"aaa": 3868,
 		"aaas": 5658,
 		"acap": 674,
+		"amqp": 5672,
 		"cap": 1026,
 		"coap": 5683,
 		"coaps": 5684,
