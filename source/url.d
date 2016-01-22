@@ -26,6 +26,8 @@ import std.encoding;
 import std.string;
 import std.utf;
 
+@safe:
+
 /// An exception thrown when something bad happens with URLs.
 class URLException : Exception {
 	this(string msg) { super(msg); }
@@ -747,7 +749,7 @@ unittest {
 	*
 	* This explicitly ensures that the result is a valid UTF-8 string.
 	*/
-string percentDecode(string encoded) {
+@trusted string percentDecode(string encoded) {
 	ubyte[] raw = percentDecodeRaw(encoded);
 	auto s = cast(string) raw;
 	if (!s.isValid) {
@@ -1031,7 +1033,7 @@ string punyDecode(string input) {
  	//   {if n is a basic code point then fail}
 		// (We aren't actually going to fail here; it's clear what this means.)
  	//   insert n into output at position i
-		output.insertInPlace(i, cast(dchar)n);
+		(() @trusted { output.insertInPlace(i, cast(dchar)n); })();  // should be @safe but isn't marked
  	//   increment i
 		i++;
  	// end
