@@ -106,6 +106,66 @@ static this() {
 }
 
 /**
+	* A collection of query parameters.
+	*
+	* This is effectively a multimap of string -> strings.
+	*/
+struct QueryParams {
+	import std.typecons;
+	alias Tuple!(string, "key", string, "value") Param;
+	Param[] params;
+
+	@property size_t length() {
+		return params.length;
+	}
+
+	/// Get a range over the query parameter values for the given key.
+	auto opIndex(string key) {
+		return params.find!(x => x.key == key).map!(x => x.value);
+	}
+
+	/// Add a query parameter with the given key and value.
+	/// If one already exists, there will now be two query parameters with the given name.
+	void add(string key, string value) {
+		params ~= Param(key, value);
+	}
+
+	/// Add a query parameter with the given key and value.
+	/// If there are any existing parameters with the same key, they are removed and overwritten.
+	void overwrite(string key, string value) {
+		for (int i = 0; i < params.length; i++) {
+			if (params[i].key == key) {
+				params[i] = params[$-1];
+				params.length--;
+			}
+		}
+		params ~= Param(key, value);
+	}
+
+	private struct QueryParamRange {
+		size_t i;
+		const(Param)[] params;
+		bool empty() { return i >= params.length; }
+		void popFront() { i++; }
+		Param front() { return params[i]; }
+	}
+
+	/**
+		* A range over the query parameters.
+		*
+		* Usage:
+		* ---
+		* foreach (key, value; url.queryParams) {}
+		* ---
+		*/
+	auto range() {
+		return QueryParamRange(0, this.params);
+	}
+	/// ditto
+	alias range this;
+}
+
+/**
 	* A Unique Resource Locator.
 	* 
 	* URLs can be parsed (see parseURL) and implicitly convert to strings.
@@ -164,6 +224,9 @@ struct URL {
 	string path;
 
 	/**
+		* Deprecated: this disallows multiple values for the same query string. Please use queryParams
+		* instead.
+		* 
 	  * The query string elements.
 	  *
 	  * For instance, in the URL https://cnn.com/news/story/17774?visited=false, the query string
@@ -174,7 +237,12 @@ struct URL {
 	  *
 	  * This field is mutable, so be cautious.
 	  */
-	string[string] query;
+	deprecated("use queryParams") string[string] query;
+
+	/**
+		* The query parameters associated with this URL.
+		*/
+	QueryParams queryParams;
 
 	/**
 	  * The fragment. In web documents, this typically refers to an anchor element.
@@ -231,7 +299,21 @@ struct URL {
 				}
 			}
 		}
-		if (query) {
+		if (queryParams.length) {
+			bool first = true;
+			s ~= '?';
+			foreach (k, v; queryParams) {
+				if (!first) {
+					s ~= '&';
+				}
+				first = false;
+				s ~= k.percentEncode;
+				if (v.length > 0) {
+					s ~= '=';
+					s ~= v.percentEncode;
+				}
+			}
+		} else if (query) {
 			s ~= '?';
 			bool first = true;
 			foreach (k, v; query) {
@@ -401,15 +483,21 @@ bool tryParseURL(string value, out URL url) {
 		auto queries = query.split('&');
 		foreach (q; queries) {
 			auto j = q.indexOf('=');
+			string key, val;
+			if (j < 0) {
+				key = q;
+			} else {
+				key = q[0..j];
+				val = q[j + 1 .. $];
+			}
 			try {
-				if (j == -1) {
-					url.query[q.percentDecode] = "";
-				} else {
-					url.query[q[0..j].percentDecode] = q[j + 1 .. $].percentDecode;
-				}
+				key = key.percentDecode;
+				val = val.percentDecode;
 			} catch (URLException) {
 				return false;
 			}
+			url.query[key] = val;
+			url.queryParams.add(key, val);
 		}
 	}
 
@@ -422,7 +510,6 @@ bool tryParseURL(string value, out URL url) {
 	return true;
 }
 
-///
 unittest {
 	{
 		// Basic.
@@ -486,6 +573,87 @@ unittest {
 	}
 }
 
+///
+unittest {
+	{
+		// Basic.
+		URL url;
+		with (url) {
+			scheme = "https";
+			host = "example.org";
+			path = "/foo/bar";
+			queryParams.add("hello", "world");
+			queryParams.add("gibe", "clay");
+			fragment = "frag";
+		}
+		assert(
+				// Not sure what order it'll come out in.
+				url.toString == "https://example.org/foo/bar?hello=world&gibe=clay#frag" ||
+				url.toString == "https://example.org/foo/bar?gibe=clay&hello=world#frag",
+				url.toString);
+	}
+	{
+		// Passing an array of query values.
+		URL url;
+		with (url) {
+			scheme = "https";
+			host = "example.org";
+			path = "/foo/bar";
+			queryParams.add("hello", "world");
+			queryParams.add("hello", "aether");
+			fragment = "frag";
+		}
+		assert(
+				// Not sure what order it'll come out in.
+				url.toString == "https://example.org/foo/bar?hello=world&hello=aether#frag" ||
+				url.toString == "https://example.org/foo/bar?hello=aether&hello=world#frag",
+				url.toString);
+	}
+	{
+		// Percent encoded.
+		URL url;
+		with (url) {
+			scheme = "https";
+			host = "example.org";
+			path = "/f☃o";
+			queryParams.add("❄", "❀");
+			queryParams.add("[", "]");
+			fragment = "ş";
+		}
+		assert(
+				// Not sure what order it'll come out in.
+				url.toString == "https://example.org/f%E2%98%83o?%E2%9D%84=%E2%9D%80&%5B=%5D#%C5%9F" ||
+				url.toString == "https://example.org/f%E2%98%83o?%5B=%5D&%E2%9D%84=%E2%9D%80#%C5%9F",
+				url.toString);
+	}
+	{
+		// Port, user, pass.
+		URL url;
+		with (url) {
+			scheme = "https";
+			host = "example.org";
+			user = "dhasenan";
+			pass = "itsasecret";
+			port = 17;
+		}
+		assert(
+				url.toString == "https://dhasenan:itsasecret@example.org:17/",
+				url.toString);
+	}
+	{
+		// Query with no path.
+		URL url;
+		with (url) {
+			scheme = "https";
+			host = "example.org";
+			queryParams.add("hi", "bye");
+		}
+		assert(
+				url.toString == "https://example.org/?hi=bye",
+				url.toString);
+	}
+}
+
 unittest {
 	// Percent decoding.
 
@@ -496,8 +664,8 @@ unittest {
 	assert(url.pass == "!:");
 	assert(url.host == "example.org");
 	assert(url.path == "/{/}");
-	assert(url.query[";"] == "");
-	assert(url.query["&"] == "=");
+	assert(url.queryParams[";"].front == "");
+	assert(url.queryParams["&"].front == "=");
 	assert(url.fragment == "#hash");
 
 	// Round trip.
@@ -655,7 +823,7 @@ unittest {
 		assert(u1.scheme == "https");
 		assert(u1.host == "example.org");
 		assert(u1.path == "/", "expected path: / actual path: " ~ u1.path);
-		assert(u1.query["login"] == "true");
+		assert(u1.queryParams["login"].front == "true");
 		assert(u1.fragment == "");
 	}
 	{
@@ -664,7 +832,7 @@ unittest {
 		assert(u1.scheme == "https");
 		assert(u1.host == "example.org");
 		assert(u1.path == "/", "expected path: / actual path: " ~ u1.path);
-		assert(u1.query["login"] == "true");
+		assert(u1.queryParams["login"].front == "true");
 		assert(u1.fragment == "justkidding");
 	}
 	{
@@ -673,7 +841,7 @@ unittest {
 		assert(u1.scheme == "https");
 		assert(u1.host == "example.org");
 		assert(u1.path == "/☃", "expected path: /☃ actual path: " ~ u1.path);
-		assert(u1.query["❄"] == "=");
+		assert(u1.queryParams["❄"].front == "=");
 		assert(u1.fragment == "^");
 	}
 }
@@ -751,6 +919,9 @@ unittest {
 	*/
 @trusted string percentDecode(string encoded) {
 	ubyte[] raw = percentDecodeRaw(encoded);
+	// This cast is not considered @safe because it converts from one pointer type to another.
+	// However, it's 1-byte values in either case, no reference types, so this won't result in any
+	// memory safety errors. We also check for validity immediately.
 	auto s = cast(string) raw;
 	if (!s.isValid) {
 		// TODO(dhasenan): 
