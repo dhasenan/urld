@@ -380,14 +380,16 @@ struct URL {
 		* ---
 		*/
 	URL opOpAssign(string op : "~")(string subsequentPath) {
-		if (path.endsWith("/") || subsequentPath.startsWith("/")) {
-			if (path.endsWith("/") && subsequentPath.startsWith("/")) {
+		if (path.endsWith("/")) {
+			if (subsequentPath.startsWith("/")) {
 				path ~= subsequentPath[1..$];
 			} else {
 				path ~= subsequentPath;
 			}
 		} else {
-			path ~= '/';
+			if (!subsequentPath.startsWith("/")) {
+                path ~= '/';
+            }
 			path ~= subsequentPath;
 		}
 		return this;
@@ -404,10 +406,12 @@ bool tryParseURL(string value, out URL url) {
 	url = URL.init;
 	// scheme:[//[user:password@]host[:port]][/]path[?query][#fragment]
 	// Scheme is optional in common use. We infer 'http' if it's not given.
-	auto i = value.indexOf("://");
+	auto i = value.indexOf("//");
 	if (i > -1) {
-		url.scheme = value[0..i];
-		value = value[i+3 .. $];
+        if (i > 1) {
+            url.scheme = value[0..i-1];
+        }
+		value = value[i+2 .. $];
 	} else {
 		url.scheme = "http";
 	}
@@ -573,6 +577,22 @@ unittest {
 	}
 }
 
+unittest
+{
+    auto url = "//foo/bar".parseURL;
+    assert(url.host == "foo", "expected host foo, got " ~ url.host);
+    assert(url.path == "/bar");
+}
+
+unittest
+{
+    auto url = "localhost:5984".parseURL;
+    auto url2 = url ~ "db1";
+    assert(url2.toString == "http://localhost:5984/db1", url2.toString);
+    auto url3 = url2 ~ "_all_docs";
+    assert(url3.toString == "http://localhost:5984/db1/_all_docs", url3.toString);
+}
+
 ///
 unittest {
 	{
@@ -693,10 +713,12 @@ unittest {
 unittest {
 	// There's an existing path.
 	auto url = parseURL("http://example.org/foo");
+    URL url2;
 	// No slash? Assume it needs a slash.
 	assert((url ~ "bar").toString == "http://example.org/foo/bar");
 	// With slash? Don't add another.
-	assert((url ~ "/bar").toString == "http://example.org/foo/bar");
+    url2 = url ~ "/bar";
+	assert(url2.toString == "http://example.org/foo/bar", url2.toString);
 	url ~= "bar";
 	assert(url.toString == "http://example.org/foo/bar");
 
