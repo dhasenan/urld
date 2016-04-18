@@ -58,6 +58,8 @@ static this() {
 		"gopher": 70,
 		"http": 80,
 		"https": 443,
+		"ws": 80,
+		"wss": 443,
 		"iac": 4569,
 		"icap": 1344,
 		"imap": 143,
