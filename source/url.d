@@ -988,8 +988,20 @@ ubyte[] percentDecodeRaw(string encoded) {
 			throw new URLException("Invalid percent encoded value: expected two characters after " ~
 					"percent symbol. Error at index " ~ i.to!string);
 		}
-		auto b = cast(ubyte)("0123456789ABCDEF".indexOf(encoded[i + 1]));
-		auto c = cast(ubyte)("0123456789ABCDEF".indexOf(encoded[i + 2]));
+		int mask = 223;
+		char bb = encode[i + 1];
+		if(bb >= 'a' && bb <= 'z')
+		{
+			bb &= mask;
+		}
+		auto b = cast(ubyte)("0123456789ABCDEF".indexOf(bb));
+		
+		char cc = encode[i + 2];
+		if(cc >= 'a' && cc <= 'z')
+		{
+			cc &= mask;
+		}
+		auto c = cast(ubyte)("0123456789ABCDEF".indexOf(cc));
 		app ~= cast(ubyte)((b << 4) | c);
 		i += 2;
 	}
