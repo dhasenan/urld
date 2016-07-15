@@ -964,6 +964,22 @@ unittest {
 
 	e = percentDecode("%E2%98%83");
 	assert(e == "☃", "expected a snowman but got" ~ e);
+
+	e = percentDecode("%e2%98%83");
+	assert(e == "☃", "expected a snowman but got" ~ e);
+
+  try {
+    // %ES is an invalid percent sequence: 'S' is not a hex digit.
+    percentDecode("%es");
+    assert(false, "expected exception not thrown");
+  } catch (URLException) {
+  }
+
+  try {
+    percentDecode("%e");
+    assert(false, "expected exception not thrown");
+  } catch (URLException) {
+  }
 }
 
 /**
@@ -988,12 +1004,31 @@ ubyte[] percentDecodeRaw(string encoded) {
 			throw new URLException("Invalid percent encoded value: expected two characters after " ~
 					"percent symbol. Error at index " ~ i.to!string);
 		}
-		auto b = cast(ubyte)("0123456789ABCDEF".indexOf(encoded[i + 1]));
-		auto c = cast(ubyte)("0123456789ABCDEF".indexOf(encoded[i + 2]));
-		app ~= cast(ubyte)((b << 4) | c);
+    if (isHex(encoded[i + 1]) && isHex(encoded[i + 2])) {
+      auto b = fromHex(encoded[i + 1]);
+      auto c = fromHex(encoded[i + 2]);
+      app ~= cast(ubyte)((b << 4) | c);
+    } else {
+      throw new URLException("Invalid percent encoded value: expected two hex digits after " ~
+          "percent symbol. Error at index " ~ i.to!string);
+    }
 		i += 2;
 	}
 	return app.data;
+}
+
+private bool isHex(char c) {
+  return ('0' <= c && '9' >= c) ||
+         ('a' <= c && 'f' >= c) ||
+         ('A' <= c && 'F' >= c);
+}
+
+private ubyte fromHex(char s) {
+  enum caseDiff = 'a' - 'A';
+  if (s >= 'a' && s <= 'z') {
+    s -= caseDiff;
+  }
+  return cast(ubyte)("0123456789ABCDEF".indexOf(s));
 }
 
 private string toPuny(string unicodeHostname) {
