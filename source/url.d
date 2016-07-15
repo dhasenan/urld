@@ -1012,15 +1012,15 @@ ubyte[] percentDecodeRaw(string encoded) {
       throw new URLException("Invalid percent encoded value: expected two hex digits after " ~
           "percent symbol. Error at index " ~ i.to!string);
     }
-		i += 2;
+    i += 2;
 	}
 	return app.data;
 }
 
 private bool isHex(char c) {
   return ('0' <= c && '9' >= c) ||
-         ('a' <= c && 'f' >= c) ||
-         ('A' <= c && 'F' >= c);
+    ('a' <= c && 'f' >= c) ||
+    ('A' <= c && 'F' >= c);
 }
 
 private ubyte fromHex(char s) {
