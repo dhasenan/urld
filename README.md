@@ -17,7 +17,7 @@ No backwards-incompatible changes are planned.
 
 Installation
 ------------
-Add `"urld": "~>0.5.0"` to your `dub.json`.
+Add `"urld": "~>1.0.0"` to your `dub.json`.
 
 Usage
 -----
@@ -37,7 +37,7 @@ with (url) {
 	host = "beep.example.net";
 	port = 1772;
 	path = "/serverinfo/info";
-	query["token"] = "my-api-token";
+  queryParams.add("token", "my-api-token");
 }
 curl.get(url);
 ```

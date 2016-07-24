@@ -165,11 +165,36 @@ struct QueryParams {
 	}
 	/// ditto
 	alias range this;
+
+	/// Convert this set of query parameters into a query string.
+  string toString() {
+		Appender!string s;
+		bool first = true;
+		foreach (tuple; this) {
+			if (!first) {
+				s ~= '&';
+			}
+			first = false;
+			s ~= tuple.key.percentEncode;
+			if (tuple.value.length > 0) {
+				s ~= '=';
+				s ~= tuple.value.percentEncode;
+			}
+		}
+		return s.data;
+  }
+
+	/// Clone this set of query parameters.
+	QueryParams dup() {
+		QueryParams other = this;
+		other.params = params.dup;
+		return other;
+	}
 }
 
 /**
 	* A Unique Resource Locator.
-	* 
+	*
 	* URLs can be parsed (see parseURL) and implicitly convert to strings.
 	*/
 struct URL {
@@ -224,22 +249,6 @@ struct URL {
 	  * "/news/story/17774".
 	  */
 	string path;
-
-	/**
-		* Deprecated: this disallows multiple values for the same query string. Please use queryParams
-		* instead.
-		* 
-	  * The query string elements.
-	  *
-	  * For instance, in the URL https://cnn.com/news/story/17774?visited=false, the query string
-	  * elements will be ["visited": "false"].
-	  *
-	  * Similarly, in the URL https://bbc.co.uk/news?item, the query string elements will be
-	  * ["item": ""].
-	  *
-	  * This field is mutable, so be cautious.
-	  */
-	deprecated("use queryParams") string[string] query;
 
 	/**
 		* The query parameters associated with this URL.
@@ -302,35 +311,9 @@ struct URL {
 			}
 		}
 		if (queryParams.length) {
-			bool first = true;
 			s ~= '?';
-			foreach (k, v; queryParams) {
-				if (!first) {
-					s ~= '&';
-				}
-				first = false;
-				s ~= k.percentEncode;
-				if (v.length > 0) {
-					s ~= '=';
-					s ~= v.percentEncode;
-				}
-			}
-		} else if (query) {
-			s ~= '?';
-			bool first = true;
-			foreach (k, v; query) {
-				if (!first) {
-					s ~= '&';
-				}
-				first = false;
-				s ~= k.percentEncode;
-				if (v.length > 0) {
-					s ~= '=';
-					s ~= v.percentEncode;
-				}
-			}
-		}
-		if (fragment) {
+			s ~= queryParams.toString;
+		}		if (fragment) {
 			s ~= '#';
 			s ~= fragment.percentEncode;
 		}
@@ -360,9 +343,7 @@ struct URL {
 	URL opBinary(string op : "~")(string subsequentPath) {
 		URL other = this;
 		other ~= subsequentPath;
-		if (query) {
-			other.query = other.query.dup;
-		}
+		other.queryParams = queryParams.dup;
 		return other;
 	}
 
@@ -390,8 +371,8 @@ struct URL {
 			}
 		} else {
 			if (!subsequentPath.startsWith("/")) {
-                path ~= '/';
-            }
+				path ~= '/';
+			}
 			path ~= subsequentPath;
 		}
 		return this;
@@ -410,9 +391,9 @@ bool tryParseURL(string value, out URL url) {
 	// Scheme is optional in common use. We infer 'http' if it's not given.
 	auto i = value.indexOf("//");
 	if (i > -1) {
-        if (i > 1) {
-            url.scheme = value[0..i-1];
-        }
+		if (i > 1) {
+			url.scheme = value[0..i-1];
+		}
 		value = value[i+2 .. $];
 	} else {
 		url.scheme = "http";
@@ -502,7 +483,6 @@ bool tryParseURL(string value, out URL url) {
 			} catch (URLException) {
 				return false;
 			}
-			url.query[key] = val;
 			url.queryParams.add(key, val);
 		}
 	}
@@ -524,8 +504,8 @@ unittest {
 			scheme = "https";
 			host = "example.org";
 			path = "/foo/bar";
-			query["hello"] = "world";
-			query["gibe"] = "clay";
+			queryParams.add("hello", "world");
+			queryParams.add("gibe", "clay");
 			fragment = "frag";
 		}
 		assert(
@@ -541,8 +521,8 @@ unittest {
 			scheme = "https";
 			host = "example.org";
 			path = "/f☃o";
-			query["❄"] = "❀";
-			query["["] = "]";
+			queryParams.add("❄", "❀");
+			queryParams.add("[", "]");
 			fragment = "ş";
 		}
 		assert(
@@ -571,7 +551,7 @@ unittest {
 		with (url) {
 			scheme = "https";
 			host = "example.org";
-			query["hi"] = "bye";
+			queryParams.add("hi", "bye");
 		}
 		assert(
 				url.toString == "https://example.org/?hi=bye",
@@ -581,18 +561,18 @@ unittest {
 
 unittest
 {
-    auto url = "//foo/bar".parseURL;
-    assert(url.host == "foo", "expected host foo, got " ~ url.host);
-    assert(url.path == "/bar");
+	auto url = "//foo/bar".parseURL;
+	assert(url.host == "foo", "expected host foo, got " ~ url.host);
+	assert(url.path == "/bar");
 }
 
 unittest
 {
-    auto url = "localhost:5984".parseURL;
-    auto url2 = url ~ "db1";
-    assert(url2.toString == "http://localhost:5984/db1", url2.toString);
-    auto url3 = url2 ~ "_all_docs";
-    assert(url3.toString == "http://localhost:5984/db1/_all_docs", url3.toString);
+	auto url = "localhost:5984".parseURL;
+	auto url2 = url ~ "db1";
+	assert(url2.toString == "http://localhost:5984/db1", url2.toString);
+	auto url3 = url2 ~ "_all_docs";
+	assert(url3.toString == "http://localhost:5984/db1/_all_docs", url3.toString);
 }
 
 ///
@@ -715,11 +695,11 @@ unittest {
 unittest {
 	// There's an existing path.
 	auto url = parseURL("http://example.org/foo");
-    URL url2;
+	URL url2;
 	// No slash? Assume it needs a slash.
 	assert((url ~ "bar").toString == "http://example.org/foo/bar");
 	// With slash? Don't add another.
-    url2 = url ~ "/bar";
+	url2 = url ~ "/bar";
 	assert(url2.toString == "http://example.org/foo/bar", url2.toString);
 	url ~= "bar";
 	assert(url.toString == "http://example.org/foo/bar");
@@ -948,7 +928,7 @@ unittest {
 	// memory safety errors. We also check for validity immediately.
 	auto s = cast(string) raw;
 	if (!s.isValid) {
-		// TODO(dhasenan): 
+		// TODO(dhasenan): more data
 		throw new URLException("input contains invalid UTF data");
 	}
 	return s;
@@ -968,18 +948,18 @@ unittest {
 	e = percentDecode("%e2%98%83");
 	assert(e == "☃", "expected a snowman but got" ~ e);
 
-  try {
-    // %ES is an invalid percent sequence: 'S' is not a hex digit.
-    percentDecode("%es");
-    assert(false, "expected exception not thrown");
-  } catch (URLException) {
-  }
+	try {
+		// %ES is an invalid percent sequence: 'S' is not a hex digit.
+		percentDecode("%es");
+		assert(false, "expected exception not thrown");
+	} catch (URLException) {
+	}
 
-  try {
-    percentDecode("%e");
-    assert(false, "expected exception not thrown");
-  } catch (URLException) {
-  }
+	try {
+		percentDecode("%e");
+		assert(false, "expected exception not thrown");
+	} catch (URLException) {
+	}
 }
 
 /**
@@ -1004,31 +984,31 @@ ubyte[] percentDecodeRaw(string encoded) {
 			throw new URLException("Invalid percent encoded value: expected two characters after " ~
 					"percent symbol. Error at index " ~ i.to!string);
 		}
-    if (isHex(encoded[i + 1]) && isHex(encoded[i + 2])) {
-      auto b = fromHex(encoded[i + 1]);
-      auto c = fromHex(encoded[i + 2]);
-      app ~= cast(ubyte)((b << 4) | c);
-    } else {
-      throw new URLException("Invalid percent encoded value: expected two hex digits after " ~
-          "percent symbol. Error at index " ~ i.to!string);
-    }
-    i += 2;
+		if (isHex(encoded[i + 1]) && isHex(encoded[i + 2])) {
+			auto b = fromHex(encoded[i + 1]);
+			auto c = fromHex(encoded[i + 2]);
+			app ~= cast(ubyte)((b << 4) | c);
+		} else {
+			throw new URLException("Invalid percent encoded value: expected two hex digits after " ~
+					"percent symbol. Error at index " ~ i.to!string);
+		}
+		i += 2;
 	}
 	return app.data;
 }
 
 private bool isHex(char c) {
-  return ('0' <= c && '9' >= c) ||
-    ('a' <= c && 'f' >= c) ||
-    ('A' <= c && 'F' >= c);
+	return ('0' <= c && '9' >= c) ||
+		('a' <= c && 'f' >= c) ||
+		('A' <= c && 'F' >= c);
 }
 
 private ubyte fromHex(char s) {
-  enum caseDiff = 'a' - 'A';
-  if (s >= 'a' && s <= 'z') {
-    s -= caseDiff;
-  }
-  return cast(ubyte)("0123456789ABCDEF".indexOf(s));
+	enum caseDiff = 'a' - 'A';
+	if (s >= 'a' && s <= 'z') {
+		s -= caseDiff;
+	}
+	return cast(ubyte)("0123456789ABCDEF".indexOf(s));
 }
 
 private string toPuny(string unicodeHostname) {
@@ -1194,12 +1174,12 @@ string punyDecode(string input) {
 	}
 	input = input[marker.length..$];
 
- 	// let n = initial_n
+	// let n = initial_n
 	dchar n = cast(dchar)128;
 
- 	// let i = 0
- 	// let bias = initial_bias
- 	// let output = an empty string indexed from 0
+	// let i = 0
+	// let bias = initial_bias
+	// let output = an empty string indexed from 0
 	ulong i = 0;
 	auto bias = initialBias;
 	dchar[] output;
