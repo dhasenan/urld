@@ -1242,7 +1242,7 @@ string punyDecode(string input) {
 	// let i = 0
 	// let bias = initial_bias
 	// let output = an empty string indexed from 0
-	ulong i = 0;
+	size_t i = 0;
 	auto bias = initialBias;
 	dchar[] output;
 	// This reserves a bit more than necessary, but it should be more efficient overall than just
@@ -1262,7 +1262,7 @@ string punyDecode(string input) {
 	}
 
  	// while the input is not exhausted do begin
-	ulong pos = 0;
+	size_t pos = 0;
 	while (pos < input.length) {
  	//   let oldi = i
  	//   let w = 1
