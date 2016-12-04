@@ -398,8 +398,9 @@ bool tryParseURL(string value, out URL url) {
 	} else {
 		url.scheme = "http";
 	}
+  // Check for an ipv6 hostname.
 	// [user:password@]host[:port]][/]path[?query][#fragment
-	i = value.indexOfAny([':', '/']);
+	i = value.indexOfAny([':', '/', '[']);
 	if (i == -1) {
 		// Just a hostname.
 		url.host = value.fromPuny;
@@ -421,13 +422,37 @@ bool tryParseURL(string value, out URL url) {
 	}
 
 	// It's trying to be a host/port, not a user/pass.
-	i = value.indexOfAny([':', '/']);
+	i = value.indexOfAny([':', '/', '[']);
 	if (i == -1) {
 		url.host = value.fromPuny;
 		return true;
 	}
-	url.host = value[0..i].fromPuny;
-	value = value[i .. $];
+
+	// Find the hostname. It's either an ipv6 address (which has special rules) or not (which doesn't
+	// have special rules). -- The main sticking point is that ipv6 addresses have colons, which we
+	// handle specially, and are offset with square brackets.
+	if (value[i] == '[') {
+		auto j = value[i..$].indexOf(']');
+		if (j < 0) {
+			// unterminated ipv6 addr
+			return false;
+		}
+		// includes square brackets
+		url.host = value[i .. i+j+1];
+		value = value[i+j+1 .. $];
+		if (value.length == 0) {
+			// read to end of string; we finished parse
+			return true;
+		}
+		if (value[0] != ':' && value[0] != '?' && value[0] != '/') {
+			return false;
+		}
+	} else {
+		// Normal host.
+		url.host = value[0..i].fromPuny;
+		value = value[i .. $];
+	}
+
 	if (value[0] == ':') {
 		auto end = value.indexOf('/');
 		if (end == -1) {
@@ -564,6 +589,43 @@ unittest
 	auto url = "//foo/bar".parseURL;
 	assert(url.host == "foo", "expected host foo, got " ~ url.host);
 	assert(url.path == "/bar");
+}
+
+unittest
+{
+	// ipv6 hostnames!
+	{
+		// full range of data
+		auto url = parseURL("https://bob:secret@[::1]:2771/foo/bar");
+		assert(url.scheme == "https", url.scheme);
+		assert(url.user == "bob", url.user);
+		assert(url.pass == "secret", url.pass);
+		assert(url.host == "[::1]", url.host);
+		assert(url.port == 2771, url.port.to!string);
+		assert(url.path == "/foo/bar", url.path);
+	}
+
+	// minimal
+	{
+		auto url = parseURL("[::1]");
+		assert(url.host == "[::1]", url.host);
+	}
+
+	// some random bits
+	{
+		auto url = parseURL("http://[::1]/foo");
+		assert(url.scheme == "http", url.scheme);
+		assert(url.host == "[::1]", url.host);
+		assert(url.path == "/foo", url.path);
+	}
+
+	{
+		auto url = parseURL("https://[2001:0db8:0:0:0:0:1428:57ab]/?login=true#justkidding");
+		assert(url.scheme == "https");
+		assert(url.host == "[2001:0db8:0:0:0:0:1428:57ab]");
+		assert(url.path == "/");
+		assert(url.fragment == "justkidding");
+	}
 }
 
 unittest
