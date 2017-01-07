@@ -1113,10 +1113,18 @@ unittest {
 	*/
 string percentDecode(string encoded)
 {
-    import std.utf : validate;
+    import std.utf : validate, UTFException;
 	auto raw = percentDecodeRaw(encoded);
 	auto s = cast(string) raw;
-	validate(s);
+    try
+    {
+        validate(s);
+    }
+    catch (UTFException e)
+    {
+        throw new URLException(
+                "The percent-encoded data `" ~ encoded ~ "` does not represent a valid UTF-8 sequence.");
+    }
 	return s;
 }
 
