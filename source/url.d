@@ -19,18 +19,16 @@
 	*/
 module url;
 
-import std.algorithm;
-import std.array;
 import std.conv;
-import std.encoding;
 import std.string;
-import std.utf;
 
+pure:
 @safe:
 
 /// An exception thrown when something bad happens with URLs.
-class URLException : Exception {
-	this(string msg) { super(msg); }
+class URLException : Exception
+{
+	this(string msg) pure { super(msg); }
 }
 
 /**
@@ -39,80 +37,78 @@ class URLException : Exception {
   * This is not exhaustive. Not all schemes use ports. Not all schemes uniquely identify a port to
 	* use even if they use ports. Entries here should be treated as best guesses.
   */
-ushort[string] schemeToDefaultPort;
-
-static this() {
-	schemeToDefaultPort = [
-		"aaa": 3868,
-		"aaas": 5658,
-		"acap": 674,
-		"amqp": 5672,
-		"cap": 1026,
-		"coap": 5683,
-		"coaps": 5684,
-		"dav": 443,
-		"dict": 2628,
-		"ftp": 21,
-		"git": 9418,
-		"go": 1096,
-		"gopher": 70,
-		"http": 80,
-		"https": 443,
-		"ws": 80,
-		"wss": 443,
-		"iac": 4569,
-		"icap": 1344,
-		"imap": 143,
-		"ipp": 631,
-		"ipps": 631,  // yes, they're both mapped to port 631
-		"irc": 6667,  // De facto default port, not the IANA reserved port.
-		"ircs": 6697,
-		"iris": 702,  // defaults to iris.beep
-		"iris.beep": 702,
-		"iris.lwz": 715,
-		"iris.xpc": 713,
-		"iris.xpcs": 714,
-		"jabber": 5222,  // client-to-server
-		"ldap": 389,
-		"ldaps": 636,
-		"msrp": 2855,
-		"msrps": 2855,
-		"mtqp": 1038,
-		"mupdate": 3905,
-		"news": 119,
-		"nfs": 2049,
-		"pop": 110,
-		"redis": 6379,
-		"reload": 6084,
-		"rsync": 873,
-		"rtmfp": 1935,
-		"rtsp": 554,
-		"shttp": 80,
-		"sieve": 4190,
-		"sip": 5060,
-		"sips": 5061,
-		"smb": 445,
-		"smtp": 25,
-		"snews": 563,
-		"snmp": 161,
-		"soap.beep": 605,
-		"ssh": 22,
-		"stun": 3478,
-		"stuns": 5349,
-		"svn": 3690,
-		"teamspeak": 9987,
-		"telnet": 23,
-		"tftp": 69,
-		"tip": 3372,
-	];
-}
+enum ushort[string] schemeToDefaultPort = [
+    "aaa": 3868,
+    "aaas": 5658,
+    "acap": 674,
+    "amqp": 5672,
+    "cap": 1026,
+    "coap": 5683,
+    "coaps": 5684,
+    "dav": 443,
+    "dict": 2628,
+    "ftp": 21,
+    "git": 9418,
+    "go": 1096,
+    "gopher": 70,
+    "http": 80,
+    "https": 443,
+    "ws": 80,
+    "wss": 443,
+    "iac": 4569,
+    "icap": 1344,
+    "imap": 143,
+    "ipp": 631,
+    "ipps": 631,  // yes, they're both mapped to port 631
+    "irc": 6667,  // De facto default port, not the IANA reserved port.
+    "ircs": 6697,
+    "iris": 702,  // defaults to iris.beep
+    "iris.beep": 702,
+    "iris.lwz": 715,
+    "iris.xpc": 713,
+    "iris.xpcs": 714,
+    "jabber": 5222,  // client-to-server
+    "ldap": 389,
+    "ldaps": 636,
+    "msrp": 2855,
+    "msrps": 2855,
+    "mtqp": 1038,
+    "mupdate": 3905,
+    "news": 119,
+    "nfs": 2049,
+    "pop": 110,
+    "redis": 6379,
+    "reload": 6084,
+    "rsync": 873,
+    "rtmfp": 1935,
+    "rtsp": 554,
+    "shttp": 80,
+    "sieve": 4190,
+    "sip": 5060,
+    "sips": 5061,
+    "smb": 445,
+    "smtp": 25,
+    "snews": 563,
+    "snmp": 161,
+    "soap.beep": 605,
+    "ssh": 22,
+    "stun": 3478,
+    "stuns": 5349,
+    "svn": 3690,
+    "teamspeak": 9987,
+    "telnet": 23,
+    "tftp": 69,
+    "tip": 3372,
+];
 
 /**
 	* A collection of query parameters.
 	*
 	* This is effectively a multimap of string -> strings.
 	*/
-struct QueryParams {
+struct QueryParams
+{
+pure:
 	import std.typecons;
 	alias Tuple!(string, "key", string, "value") Param;
 	Param[] params;
@@ -122,7 +118,10 @@ struct QueryParams {
 	}
 
 	/// Get a range over the query parameter values for the given key.
-	auto opIndex(string key) {
+	auto opIndex(string key)
+    {
+        import std.algorithm.searching : find;
+        import std.algorithm.iteration : map;
 		return params.find!(x => x.key == key).map!(x => x.value);
 	}
 
@@ -144,7 +143,9 @@ struct QueryParams {
 		params ~= Param(key, value);
 	}
 
-	private struct QueryParamRange {
+	private struct QueryParamRange
+    {
+    pure:
 		size_t i;
 		const(Param)[] params;
 		bool empty() { return i >= params.length; }
@@ -168,20 +169,21 @@ struct QueryParams {
 
 	/// Convert this set of query parameters into a query string.
   string toString() {
-		Appender!string s;
-		bool first = true;
-		foreach (tuple; this) {
-			if (!first) {
-				s ~= '&';
-			}
-			first = false;
-			s ~= tuple.key.percentEncode;
-			if (tuple.value.length > 0) {
-				s ~= '=';
-				s ~= tuple.value.percentEncode;
-			}
-		}
-		return s.data;
+      import std.array : Appender;
+      Appender!string s;
+      bool first = true;
+      foreach (tuple; this) {
+          if (!first) {
+              s ~= '&';
+          }
+          first = false;
+          s ~= tuple.key.percentEncode;
+          if (tuple.value.length > 0) {
+              s ~= '=';
+              s ~= tuple.value.percentEncode;
+          }
+      }
+      return s.data;
   }
 
 	/// Clone this set of query parameters.
@@ -197,7 +199,9 @@ struct QueryParams {
 	*
 	* URLs can be parsed (see parseURL) and implicitly convert to strings.
 	*/
-struct URL {
+struct URL
+{
+pure:
 	/// The URL scheme. For instance, ssh, ftp, or https.
 	string scheme;
 
@@ -265,59 +269,71 @@ struct URL {
 	  * Convert this URL to a string.
 	  * The string is properly formatted and usable for, eg, a web request.
 	  */
-	string toString() {
+	string toString()
+    {
 		return toString(false);
 	}
 
 	/**
 		* Convert this URL to a string.
+        *
 		* The string is intended to be human-readable rather than machine-readable.
 		*/
-	string toHumanReadableString() {
+	string toHumanReadableString()
+    {
 		return toString(true);
 	}
 
+    ///
+    unittest
+    {
+        auto url = "https://xn--m3h.xn--n3h.org/?hi=bye".parseURL;
+        assert(url.toString == "https://xn--m3h.xn--n3h.org/?hi=bye", url.toString);
+        assert(url.toHumanReadableString == "https://☂.☃.org/?hi=bye", url.toString);
+    }
+
 	private string toString(bool humanReadable) {
-		Appender!string s;
-		s ~= scheme;
-		s ~= "://";
-		if (user) {
-			s ~= humanReadable ? user : user.percentEncode;
-			s ~= ":";
-			s ~= humanReadable ? pass : pass.percentEncode;
-			s ~= "@";
-		}
-		s ~= humanReadable ? host : host.toPuny;
-		if (providedPort) {
-			if ((scheme in schemeToDefaultPort) == null || schemeToDefaultPort[scheme] != providedPort) {
-				s ~= ":";
-				s ~= providedPort.to!string;
-			}
-		}
-		string p = path;
-		if (p.length == 0 || p == "/") {
-			s ~= '/';
-		} else {
-			if (p[0] == '/') {
-				p = p[1..$];
-			}
-			if (humanReadable) {
-				s ~= p;
-			} else {
-				foreach (part; p.split('/')) {
-					s ~= '/';
-					s ~= part.percentEncode;
-				}
-			}
-		}
-		if (queryParams.length) {
-			s ~= '?';
-			s ~= queryParams.toString;
-		}		if (fragment) {
-			s ~= '#';
-			s ~= fragment.percentEncode;
-		}
-		return s.data;
+        import std.array : Appender;
+        Appender!string s;
+        s ~= scheme;
+        s ~= "://";
+        if (user) {
+            s ~= humanReadable ? user : user.percentEncode;
+            s ~= ":";
+            s ~= humanReadable ? pass : pass.percentEncode;
+            s ~= "@";
+        }
+        s ~= humanReadable ? host : host.toPuny;
+        if (providedPort) {
+            if ((scheme in schemeToDefaultPort) == null || schemeToDefaultPort[scheme] != providedPort) {
+                s ~= ":";
+                s ~= providedPort.to!string;
+            }
+        }
+        string p = path;
+        if (p.length == 0 || p == "/") {
+            s ~= '/';
+        } else {
+            if (p[0] == '/') {
+                p = p[1..$];
+            }
+            if (humanReadable) {
+                s ~= p;
+            } else {
+                foreach (part; p.split('/')) {
+                    s ~= '/';
+                    s ~= part.percentEncode;
+                }
+            }
+        }
+        if (queryParams.length) {
+            s ~= '?';
+            s ~= queryParams.toString;
+        }		if (fragment) {
+            s ~= '#';
+            s ~= fragment.percentEncode;
+        }
+        return s.data;
 	}
 
 	/// Implicitly convert URLs to strings.
@@ -377,6 +393,78 @@ struct URL {
 		}
 		return this;
 	}
+
+    /**
+        * Convert a relative URL to an absolute URL.
+        *
+        * This is designed so that you can scrape a webpage and quickly convert links within the
+        * page to URLs you can actually work with, but you're clever; I'm sure you'll find more uses
+        * for it.
+        *
+        * It's biased toward HTTP family URLs; as one quirk, "//" is interpreted as "same scheme,
+        * different everything else", which might not be desirable for all schemes.
+        *
+        * This only handles URLs, not URIs; if you pass in 'mailto:bob.dobbs@subgenius.org', for
+        * instance, this will give you our best attempt to parse it as a URL.
+        *
+        * Examples:
+        * ---
+        * auto base = "https://example.org/passworddb?secure=false".parseURL;
+        *
+        * // Download https://example.org/passworddb/by-username/dhasenan
+        * download(base.resolve("by-username/dhasenan"));
+        *
+        * // Download https://example.org/static/style.css
+        * download(base.resolve("/static/style.css"));
+        *
+        * // Download https://cdn.example.net/jquery.js
+        * download(base.resolve("https://cdn.example.net/jquery.js"));
+        * ---
+        */
+    URL resolve(string other)
+    {
+        if (other.length == 0) return this;
+        if (other[0] == '/')
+        {
+            if (other.length > 1 && other[1] == '/')
+            {
+                // Uncommon syntax: a link like "//wikimedia.org" means "same scheme, switch URL"
+                return parseURL(this.scheme ~ ':' ~ other);
+            }
+        }
+        else if (other.indexOf("://") > other.indexOf("/"))
+        {
+            // separate URL
+            return other.parseURL;
+        }
+
+        URL ret = this;
+        ret.path = "";
+        ret.queryParams = ret.queryParams.init;
+        if (other[0] != '/')
+        {
+            // relative to something
+            if (!this.path.length)
+            {
+                // nothing to be relative to
+                other = "/" ~ other;
+            }
+            else if (this.path[$-1] == '/')
+            {
+                // directory-style path for the current thing
+                // resolve relative to this directory
+                other = this.path ~ other;
+            }
+            else
+            {
+                // this is a file-like thing
+                // find the 'directory' and relative to that
+                other = this.path[0..this.path.lastIndexOf('/') + 1] ~ other;
+            }
+        }
+        parsePathAndQuery(ret, other);
+        return ret;
+    }
 }
 
 /**
@@ -385,7 +473,8 @@ struct URL {
 	* This attempts to parse a wide range of URLs as people might actually type them. Some mistakes
 	* may be made. However, any URL in a correct format will be parsed correctly.
 	*/
-bool tryParseURL(string value, out URL url) {
+bool tryParseURL(string value, out URL url)
+{
 	url = URL.init;
 	// scheme:[//[user:password@]host[:port]][/]path[?query][#fragment]
 	// Scheme is optional in common use. We infer 'http' if it's not given.
@@ -468,57 +557,80 @@ bool tryParseURL(string value, out URL url) {
 			return true;
 		}
 	}
+    return parsePathAndQuery(url, value);
+}
 
-	i = value.indexOfAny("?#");
-	if (i == -1) {
-		url.path = value.percentDecode;
-		return true;
-	}
+private bool parsePathAndQuery(ref URL url, string value)
+{
+    auto i = value.indexOfAny("?#");
+    if (i == -1)
+    {
+        url.path = value.percentDecode;
+        return true;
+    }
 
-	try {
-		url.path = value[0..i].percentDecode;
-	} catch (URLException) {
-		return false;
-	}
-	auto c = value[i];
-	value = value[i + 1 .. $];
-	if (c == '?') {
-		i = value.indexOf('#');
-		string query;
-		if (i < 0) {
-			query = value;
-			value = null;
-		} else {
-			query = value[0..i];
-			value = value[i + 1 .. $];
-		}
-		auto queries = query.split('&');
-		foreach (q; queries) {
-			auto j = q.indexOf('=');
-			string key, val;
-			if (j < 0) {
-				key = q;
-			} else {
-				key = q[0..j];
-				val = q[j + 1 .. $];
-			}
-			try {
-				key = key.percentDecode;
-				val = val.percentDecode;
-			} catch (URLException) {
-				return false;
-			}
-			url.queryParams.add(key, val);
-		}
-	}
+    try
+    {
+        url.path = value[0..i].percentDecode;
+    }
+    catch (URLException)
+    {
+        return false;
+    }
 
-	try {
-		url.fragment = value.percentDecode;
-	} catch (URLException) {
-		return false;
-	}
+    auto c = value[i];
+    value = value[i + 1 .. $];
+    if (c == '?')
+    {
+        i = value.indexOf('#');
+        string query;
+        if (i < 0)
+        {
+            query = value;
+            value = null;
+        }
+        else
+        {
+            query = value[0..i];
+            value = value[i + 1 .. $];
+        }
+        auto queries = query.split('&');
+        foreach (q; queries)
+        {
+            auto j = q.indexOf('=');
+            string key, val;
+            if (j < 0)
+            {
+                key = q;
+            }
+            else
+            {
+                key = q[0..j];
+                val = q[j + 1 .. $];
+            }
+            try
+            {
+                key = key.percentDecode;
+                val = val.percentDecode;
+            }
+            catch (URLException)
+            {
+                return false;
+            }
+            url.queryParams.add(key, val);
+        }
+    }
 
-	return true;
+    try
+    {
+        url.fragment = value.percentDecode;
+    }
+    catch (URLException)
+    {
+        return false;
+    }
+
+    return true;
 }
 
 unittest {
@@ -743,12 +855,6 @@ unittest {
 }
 
 unittest {
-	auto url = "https://xn--m3h.xn--n3h.org/?hi=bye".parseURL;
-	assert(url.toString == "https://xn--m3h.xn--n3h.org/?hi=bye", url.toString);
-	assert(url.toHumanReadableString == "https://☂.☃.org/?hi=bye", url.toString);
-}
-
-unittest {
 	auto url = "https://☂.☃.org/?hi=bye".parseURL;
 	assert(url.toString == "https://xn--m3h.xn--n3h.org/?hi=bye");
 }
@@ -792,8 +898,28 @@ unittest {
 	url = "ircs://irc.freenode.com/#d".parseURL;
 	assert(url.toString == "ircs://irc.freenode.com/#d", url.toString);
 }
+unittest
+{
+    // basic resolve()
+    {
+        auto base = "https://example.org/this/".parseURL;
+        assert(base.resolve("that") == "https://example.org/this/that");
+        assert(base.resolve("/that") == "https://example.org/that");
+        assert(base.resolve("//example.net/that") == "https://example.net/that");
+    }
 
-unittest {
+    // ensure we don't preserve query params
+    {
+        auto base = "https://example.org/this?query=value&other=value2".parseURL;
+        assert(base.resolve("that") == "https://example.org/that");
+        assert(base.resolve("/that") == "https://example.org/that");
+        assert(base.resolve("//example.net/that") == "https://example.net/that");
+    }
+}
+
+
+unittest
+{
 	import std.net.curl;
 	auto url = "http://example.org".parseURL;
 	assert(is(typeof(std.net.curl.get(url))));
@@ -938,6 +1064,8 @@ string percentEncode(string raw) {
 	// We *must* encode these characters: :/?#[]@!$&'()*+,;="
 	// We *can* encode any other characters.
 	// We *should not* encode alpha, numeric, or -._~.
+    import std.utf : encode;
+    import std.array : Appender;
 	Appender!string app;
 	foreach (dchar d; raw) {
 		if (('a' <= d && 'z' >= d) ||
@@ -983,16 +1111,12 @@ unittest {
 	*
 	* This explicitly ensures that the result is a valid UTF-8 string.
 	*/
-@trusted string percentDecode(string encoded) {
-	ubyte[] raw = percentDecodeRaw(encoded);
-	// This cast is not considered @safe because it converts from one pointer type to another.
-	// However, it's 1-byte values in either case, no reference types, so this won't result in any
-	// memory safety errors. We also check for validity immediately.
+string percentDecode(string encoded)
+{
+    import std.utf : validate;
+	auto raw = percentDecodeRaw(encoded);
 	auto s = cast(string) raw;
-	if (!s.isValid) {
-		// TODO(dhasenan): more data
-		throw new URLException("input contains invalid UTF data");
-	}
+	validate(s);
 	return s;
 }
 
@@ -1034,9 +1158,11 @@ unittest {
 	* This yields a ubyte array and will not perform validation on the output. However, an improperly
 	* formatted input string will result in a URLException.
 	*/
-ubyte[] percentDecodeRaw(string encoded) {
+immutable(ubyte)[] percentDecodeRaw(string encoded)
+{
 	// We're dealing with possibly incorrectly encoded UTF-8. Mark it down as ubyte[] for now.
-	Appender!(ubyte[]) app;
+    import std.array : Appender;
+	Appender!(immutable(ubyte)[]) app;
 	for (int i = 0; i < encoded.length; i++) {
 		if (encoded[i] != '%') {
 			app ~= encoded[i];
@@ -1073,7 +1199,8 @@ private ubyte fromHex(char s) {
 	return cast(ubyte)("0123456789ABCDEF".indexOf(s));
 }
 
-private string toPuny(string unicodeHostname) {
+private string toPuny(string unicodeHostname)
+{
 	bool mustEncode = false;
 	foreach (i, dchar d; unicodeHostname) {
 		auto c = cast(uint) d;
@@ -1091,10 +1218,13 @@ private string toPuny(string unicodeHostname) {
 	if (!mustEncode) {
 		return unicodeHostname;
 	}
+    import std.algorithm.iteration : map;
 	return unicodeHostname.split('.').map!punyEncode.join(".");
 }
 
-private string fromPuny(string hostname) {
+private string fromPuny(string hostname)
+{
+    import std.algorithm.iteration : map;
 	return hostname.split('.').map!punyDecode.join(".");
 }
 
@@ -1139,7 +1269,9 @@ private {
 	* auto encodedDomain = domain.splitter(".").map!(punyEncode).join(".");
 	* ---
 	*/
-string punyEncode(string input) {
+string punyEncode(string input)
+{
+    import std.array : Appender;
 	ulong delta = 0;
 	dchar n = initialN;
 	auto i = 0;
@@ -1305,6 +1437,7 @@ string punyDecode(string input) {
  	//   {if n is a basic code point then fail}
 		// (We aren't actually going to fail here; it's clear what this means.)
  	//   insert n into output at position i
+        import std.array : insertInPlace;
 		(() @trusted { output.insertInPlace(i, cast(dchar)n); })();  // should be @safe but isn't marked
  	//   increment i
 		i++;
