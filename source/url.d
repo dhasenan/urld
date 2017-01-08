@@ -113,12 +113,12 @@ pure:
 	alias Tuple!(string, "key", string, "value") Param;
 	Param[] params;
 
-	@property size_t length() {
+	@property size_t length() const {
 		return params.length;
 	}
 
 	/// Get a range over the query parameter values for the given key.
-	auto opIndex(string key)
+	auto opIndex(string key) const
     {
         import std.algorithm.searching : find;
         import std.algorithm.iteration : map;
@@ -161,14 +161,15 @@ pure:
 		* foreach (key, value; url.queryParams) {}
 		* ---
 		*/
-	auto range() {
+	auto range() const
+    {
 		return QueryParamRange(0, this.params);
 	}
 	/// ditto
 	alias range this;
 
 	/// Convert this set of query parameters into a query string.
-  string toString() {
+  string toString() const {
       import std.array : Appender;
       Appender!string s;
       bool first = true;
@@ -224,7 +225,8 @@ pure:
 	  * If you explicitly need to detect whether the user provided a port, check the providedPort
 	  * field.
 	  */
-	@property ushort port() {
+	@property ushort port() const
+    {
 		if (providedPort != 0) {
 			return providedPort;
 		}
@@ -239,7 +241,8 @@ pure:
 		*
 		* This sets the providedPort field and is provided for convenience.
 		*/
-	@property ushort port(ushort value) {
+	@property ushort port(ushort value)
+    {
 		return providedPort = value;
 	}
 
@@ -269,7 +272,7 @@ pure:
 	  * Convert this URL to a string.
 	  * The string is properly formatted and usable for, eg, a web request.
 	  */
-	string toString()
+	string toString() const
     {
 		return toString(false);
 	}
@@ -279,7 +282,7 @@ pure:
         *
 		* The string is intended to be human-readable rather than machine-readable.
 		*/
-	string toHumanReadableString()
+	string toHumanReadableString() const
     {
 		return toString(true);
 	}
@@ -292,7 +295,14 @@ pure:
         assert(url.toHumanReadableString == "https://☂.☃.org/?hi=bye", url.toString);
     }
 
-	private string toString(bool humanReadable) {
+    unittest
+    {
+        assert("http://example.org/some_path".parseURL.toHumanReadableString ==
+                "http://example.org/some_path");
+    }
+
+	private string toString(bool humanReadable) const
+    {
         import std.array : Appender;
         Appender!string s;
         s ~= scheme;
@@ -314,12 +324,12 @@ pure:
         if (p.length == 0 || p == "/") {
             s ~= '/';
         } else {
-            if (p[0] == '/') {
-                p = p[1..$];
-            }
             if (humanReadable) {
                 s ~= p;
             } else {
+                if (p[0] == '/') {
+                    p = p[1..$];
+                }
                 foreach (part; p.split('/')) {
                     s ~= '/';
                     s ~= part.percentEncode;
@@ -338,6 +348,59 @@ pure:
 
 	/// Implicitly convert URLs to strings.
 	alias toString this;
+
+    /**
+      Compare two URLs.
+
+      I tried to make the comparison produce a sort order that seems natural, so it's not identical
+      to sorting based on .toString(). For instance, username/password have lower priority than
+      host. The scheme has higher priority than port but lower than host.
+
+      While the output of this is guaranteed to provide a total ordering, and I've attempted to make
+      it human-friendly, it isn't guaranteed to be consistent between versions. The implementation
+      and its results can change without a minor version increase.
+    */
+    int opCmp(const URL other)
+    {
+        return asTuple.opCmp(other.asTuple);
+    }
+
+    private auto asTuple() const
+    {
+        return tuple(host, scheme, port, user, pass, path);
+    }
+
+    int opEquals(const URL other)
+    {
+        return asTuple() == other.asTuple();
+    }
+
+    unittest
+    {
+        import std.algorithm, std.array, std.format;
+        assert("http://example.org/some_path".parseURL > "http://example.org/other_path".parseURL);
+        alias sorted = std.algorithm.sort;
+        auto parsedURLs =
+        [
+            "http://example.org/some_path",
+            "http://example.org:81/other_path",
+            "http://example.org/other_path",
+            "https://example.org/first_path",
+            "http://example.xyz/other_other_path",
+            "http://me:secret@blog.ikeran.org/wp_admin",
+        ].map!(x => x.parseURL).array;
+        auto urls = sorted(parsedURLs).map!(x => x.toHumanReadableString).array;
+        auto expected =
+        [
+            "http://me:secret@blog.ikeran.org/wp_admin",
+            "http://example.org/other_path",
+            "http://example.org/some_path",
+            "http://example.org:81/other_path",
+            "https://example.org/first_path",
+            "http://example.xyz/other_other_path",
+        ];
+        assert(cmp(urls, expected) == 0, "expected:\n%s\ngot:\n%s".format(expected, urls));
+    }
 
 	/**
 		* The append operator (~).
