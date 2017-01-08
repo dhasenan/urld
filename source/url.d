@@ -360,7 +360,7 @@ pure:
       it human-friendly, it isn't guaranteed to be consistent between versions. The implementation
       and its results can change without a minor version increase.
     */
-    int opCmp(const URL other)
+    int opCmp(const URL other) const
     {
         return asTuple.opCmp(other.asTuple);
     }
@@ -371,7 +371,22 @@ pure:
         return tuple(host, scheme, port, user, pass, path);
     }
 
-    int opEquals(const URL other)
+    bool opEquals(string other)
+    {
+        URL o;
+        if (!tryParseURL(other, o))
+        {
+            return false;
+        }
+        return asTuple() == o.asTuple();
+    }
+
+    bool opEquals(ref const URL other)
+    {
+        return asTuple() == other.asTuple();
+    }
+
+    bool opEquals(const URL other)
     {
         return asTuple() == other.asTuple();
     }
@@ -1590,3 +1605,4 @@ unittest {
 		assert(decodedDomain == "xn--m3h.xn--n3h.com", decodedDomain);
 	}
 }
+
