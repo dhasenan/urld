@@ -367,6 +367,7 @@ pure:
 
     private auto asTuple() const
     {
+        import std.typecons : tuple;
         return tuple(host, scheme, port, user, pass, path);
     }
 
