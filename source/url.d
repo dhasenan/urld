@@ -371,7 +371,7 @@ pure:
         return tuple(host, scheme, port, user, pass, path);
     }
 
-    bool opEquals(string other)
+    bool opEquals(string other) const
     {
         URL o;
         if (!tryParseURL(other, o))
@@ -381,12 +381,12 @@ pure:
         return asTuple() == o.asTuple();
     }
 
-    bool opEquals(ref const URL other)
+    bool opEquals(ref const URL other) const
     {
         return asTuple() == other.asTuple();
     }
 
-    bool opEquals(const URL other)
+    bool opEquals(const URL other) const
     {
         return asTuple() == other.asTuple();
     }
@@ -511,7 +511,7 @@ pure:
                 return parseURL(this.scheme ~ ':' ~ other);
             }
         }
-        else if (other.indexOf("://") > other.indexOf("/"))
+        else if (other.indexOf("://") < other.indexOf("/"))
         {
             // separate URL
             return other.parseURL;
@@ -1288,6 +1288,11 @@ private ubyte fromHex(char s) {
 
 private string toPuny(string unicodeHostname)
 {
+    if (unicodeHostname[0] == '[')
+    {
+        // It's an ipv6 name.
+        return unicodeHostname;
+    }
 	bool mustEncode = false;
 	foreach (i, dchar d; unicodeHostname) {
 		auto c = cast(uint) d;
