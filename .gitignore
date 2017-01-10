@@ -1,2 +1,7 @@
 .dub/
 __test__library__
+docs.json
+docs/
+__dummy.html
+liburld.a
+*.swp
