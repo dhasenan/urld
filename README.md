@@ -17,7 +17,7 @@ No backwards-incompatible changes are planned.
 
 Installation
 ------------
-Add `"urld": "~>1.1.0"` to your `dub.json`.
+Add `"urld": "~>2.0.1"` to your `dub.json`.
 
 Usage
 -----
