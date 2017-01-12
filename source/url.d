@@ -511,10 +511,14 @@ pure:
                 return parseURL(this.scheme ~ ':' ~ other);
             }
         }
-        else if (other.indexOf("://") < other.indexOf("/"))
+        else
         {
+            auto schemeSep = other.indexOf("://");
+            if (schemeSep >= 0 && schemeSep < other.indexOf("/"))
             // separate URL
-            return other.parseURL;
+            {
+                return other.parseURL;
+            }
         }
 
         URL ret = this;
@@ -543,6 +547,13 @@ pure:
         }
         parsePathAndQuery(ret, other);
         return ret;
+    }
+
+    unittest
+    {
+        auto a = "http://alcyius.com/dndtools/index.html".parseURL;
+        auto b = a.resolve("contacts/index.html");
+        assert(b.toString == "http://alcyius.com/dndtools/contacts/index.html");
     }
 }
 
@@ -992,6 +1003,7 @@ unittest
         auto base = "https://example.org/this?query=value&other=value2".parseURL;
         assert(base.resolve("that") == "https://example.org/that");
         assert(base.resolve("/that") == "https://example.org/that");
+        assert(base.resolve("tother/that") == "https://example.org/tother/that");
         assert(base.resolve("//example.net/that") == "https://example.net/that");
     }
 }
