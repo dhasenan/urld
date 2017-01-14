@@ -109,90 +109,105 @@ enum ushort[string] schemeToDefaultPort = [
 struct QueryParams
 {
 pure:
-	import std.typecons;
-	alias Tuple!(string, "key", string, "value") Param;
-	Param[] params;
+    import std.typecons;
+    alias Tuple!(string, "key", string, "value") Param;
+    Param[] params;
 
-	@property size_t length() const {
-		return params.length;
-	}
+    @property size_t length() const {
+        return params.length;
+    }
 
-	/// Get a range over the query parameter values for the given key.
-	auto opIndex(string key) const
+    /// Get a range over the query parameter values for the given key.
+    auto opIndex(string key) const
     {
         import std.algorithm.searching : find;
         import std.algorithm.iteration : map;
-		return params.find!(x => x.key == key).map!(x => x.value);
-	}
+        return params.find!(x => x.key == key).map!(x => x.value);
+    }
 
-	/// Add a query parameter with the given key and value.
-	/// If one already exists, there will now be two query parameters with the given name.
-	void add(string key, string value) {
-		params ~= Param(key, value);
-	}
+    /// Add a query parameter with the given key and value.
+    /// If one already exists, there will now be two query parameters with the given name.
+    void add(string key, string value) {
+        params ~= Param(key, value);
+    }
 
-	/// Add a query parameter with the given key and value.
-	/// If there are any existing parameters with the same key, they are removed and overwritten.
-	void overwrite(string key, string value) {
-		for (int i = 0; i < params.length; i++) {
-			if (params[i].key == key) {
-				params[i] = params[$-1];
-				params.length--;
-			}
-		}
-		params ~= Param(key, value);
-	}
+    /// Add a query parameter with the given key and value.
+    /// If there are any existing parameters with the same key, they are removed and overwritten.
+    void overwrite(string key, string value) {
+        for (int i = 0; i < params.length; i++) {
+            if (params[i].key == key) {
+                params[i] = params[$-1];
+                params.length--;
+            }
+        }
+        params ~= Param(key, value);
+    }
 
-	private struct QueryParamRange
+    private struct QueryParamRange
     {
-    pure:
-		size_t i;
-		const(Param)[] params;
-		bool empty() { return i >= params.length; }
-		void popFront() { i++; }
-		Param front() { return params[i]; }
-	}
+pure:
+        size_t i;
+        const(Param)[] params;
+        bool empty() { return i >= params.length; }
+        void popFront() { i++; }
+        Param front() { return params[i]; }
+    }
 
-	/**
-		* A range over the query parameters.
-		*
-		* Usage:
-		* ---
-		* foreach (key, value; url.queryParams) {}
-		* ---
-		*/
-	auto range() const
+    /**
+     * A range over the query parameters.
+     *
+     * Usage:
+     * ---
+     * foreach (key, value; url.queryParams) {}
+     * ---
+     */
+    auto range() const
     {
-		return QueryParamRange(0, this.params);
-	}
-	/// ditto
-	alias range this;
+        return QueryParamRange(0, this.params);
+    }
+    /// ditto
+    alias range this;
 
-	/// Convert this set of query parameters into a query string.
-  string toString() const {
-      import std.array : Appender;
-      Appender!string s;
-      bool first = true;
-      foreach (tuple; this) {
-          if (!first) {
-              s ~= '&';
-          }
-          first = false;
-          s ~= tuple.key.percentEncode;
-          if (tuple.value.length > 0) {
-              s ~= '=';
-              s ~= tuple.value.percentEncode;
-          }
-      }
-      return s.data;
-  }
+    /// Convert this set of query parameters into a query string.
+    string toString() const {
+        import std.array : Appender;
+        Appender!string s;
+        bool first = true;
+        foreach (tuple; this) {
+            if (!first) {
+                s ~= '&';
+            }
+            first = false;
+            s ~= tuple.key.percentEncode;
+            if (tuple.value.length > 0) {
+                s ~= '=';
+                s ~= tuple.value.percentEncode;
+            }
+        }
+        return s.data;
+    }
 
-	/// Clone this set of query parameters.
-	QueryParams dup() {
-		QueryParams other = this;
-		other.params = params.dup;
-		return other;
-	}
+    /// Clone this set of query parameters.
+    QueryParams dup()
+    {
+        QueryParams other = this;
+        other.params = params.dup;
+        return other;
+    }
+
+    int opCmp(const ref QueryParams other) const
+    {
+        for (int i = 0; i < params.length && i < other.params.length; i++)
+        {
+            auto c = cmp(params[i].key, other.params[i].key);
+            if (c != 0) return c;
+            c = cmp(params[i].value, other.params[i].value);
+            if (c != 0) return c;
+        }
+        if (params.length > other.params.length) return 1;
+        if (params.length < other.params.length) return -1;
+        return 0;
+    }
 }
 
 /**
@@ -301,6 +316,26 @@ pure:
                 "http://example.org/some_path");
     }
 
+    /**
+      * Convert the path and query string of this URL to a string.
+      */
+    string toPathAndQueryString() const
+    {
+        if (queryParams.length > 0)
+        {
+            return path ~ '?' ~ queryParams.toString;
+        }
+        return path;
+    }
+
+    ///
+    unittest
+    {
+        auto u = "http://example.org/index?page=12".parseURL;
+        auto pathAndQuery = u.toPathAndQueryString();
+        assert(pathAndQuery == "/index?page=12", pathAndQuery);
+    }
+
 	private string toString(bool humanReadable) const
     {
         import std.array : Appender;
@@ -362,7 +397,12 @@ pure:
     */
     int opCmp(const URL other) const
     {
-        return asTuple.opCmp(other.asTuple);
+        auto i = asTuple.opCmp(other.asTuple);
+        if (i != 0)
+        {
+            return i;
+        }
+        return queryParams.opCmp(other.queryParams);
     }
 
     private auto asTuple() const
@@ -416,6 +456,16 @@ pure:
             "http://example.xyz/other_other_path",
         ];
         assert(cmp(urls, expected) == 0, "expected:\n%s\ngot:\n%s".format(expected, urls));
+    }
+
+    unittest
+    {
+        auto a = "http://x.org/a?b=c".parseURL;
+        auto b = "http://x.org/a?d=e".parseURL;
+        auto c = "http://x.org/a?b=a".parseURL;
+        assert(a < b);
+        assert(c < b);
+        assert(c < a);
     }
 
 	/**
@@ -545,6 +595,30 @@ pure:
                 other = this.path[0..this.path.lastIndexOf('/') + 1] ~ other;
             }
         }
+        // collapse /foo/../ to /
+        if (other.indexOf("/../") >= 0)
+        {
+            import std.array : Appender, array;
+            import std.string : split;
+            import std.algorithm.iteration : joiner, filter;
+            string[] parts = other.split('/');
+            for (int i = 0; i < parts.length; i++)
+            {
+                if (parts[i] == "..")
+                {
+                    for (int j = i - 1; j >= 0; j--)
+                    {
+                        if (parts[j] != null)
+                        {
+                            parts[j] = null;
+                            parts[i] = null;
+                            break;
+                        }
+                    }
+                }
+            }
+            other = "/" ~ parts.filter!(x => x != null).joiner("/").to!string;
+        }
         parsePathAndQuery(ret, other);
         return ret;
     }
@@ -554,6 +628,27 @@ pure:
         auto a = "http://alcyius.com/dndtools/index.html".parseURL;
         auto b = a.resolve("contacts/index.html");
         assert(b.toString == "http://alcyius.com/dndtools/contacts/index.html");
+    }
+
+    unittest
+    {
+        auto a = "http://alcyius.com/dndtools/index.html?a=b".parseURL;
+        auto b = a.resolve("contacts/index.html?foo=bar");
+        assert(b.toString == "http://alcyius.com/dndtools/contacts/index.html?foo=bar");
+    }
+
+    unittest
+    {
+        auto a = "http://alcyius.com/dndtools/index.html".parseURL;
+        auto b = a.resolve("../index.html");
+        assert(b.toString == "http://alcyius.com/index.html", b.toString);
+    }
+
+    unittest
+    {
+        auto a = "http://alcyius.com/dndtools/foo/bar/index.html".parseURL;
+        auto b = a.resolve("../index.html");
+        assert(b.toString == "http://alcyius.com/dndtools/foo/index.html", b.toString);
     }
 }
 
