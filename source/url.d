@@ -108,6 +108,11 @@ enum ushort[string] schemeToDefaultPort = [
 	*/
 struct QueryParams
 {
+    hash_t toHash() const nothrow @safe
+    {
+        return typeid(params).getHash(&params);
+    }
+
 pure:
     import std.typecons;
     alias Tuple!(string, "key", string, "value") Param;
@@ -217,6 +222,11 @@ pure:
 	*/
 struct URL
 {
+    hash_t toHash() const @safe nothrow
+    {
+        return asTuple().toHash();
+    }
+
 pure:
 	/// The URL scheme. For instance, ssh, ftp, or https.
 	string scheme;
@@ -240,7 +250,7 @@ pure:
 	  * If you explicitly need to detect whether the user provided a port, check the providedPort
 	  * field.
 	  */
-	@property ushort port() const
+	@property ushort port() const nothrow
     {
 		if (providedPort != 0) {
 			return providedPort;
@@ -256,7 +266,7 @@ pure:
 		*
 		* This sets the providedPort field and is provided for convenience.
 		*/
-	@property ushort port(ushort value)
+	@property ushort port(ushort value) nothrow
     {
 		return providedPort = value;
 	}
@@ -397,20 +407,16 @@ pure:
     */
     int opCmp(const URL other) const
     {
-        auto i = asTuple.opCmp(other.asTuple);
-        if (i != 0)
-        {
-            return i;
-        }
-        return queryParams.opCmp(other.queryParams);
+        return asTuple.opCmp(other.asTuple);
     }
 
-    private auto asTuple() const
+    private auto asTuple() const nothrow
     {
         import std.typecons : tuple;
-        return tuple(host, scheme, port, user, pass, path);
+        return tuple(host, scheme, port, user, pass, path, queryParams);
     }
 
+    /// Equality checks.
     bool opEquals(string other) const
     {
         URL o;
@@ -421,11 +427,13 @@ pure:
         return asTuple() == o.asTuple();
     }
 
+    /// Ditto
     bool opEquals(ref const URL other) const
     {
         return asTuple() == other.asTuple();
     }
 
+    /// Ditto
     bool opEquals(const URL other) const
     {
         return asTuple() == other.asTuple();
