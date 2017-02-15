@@ -1027,7 +1027,7 @@ unittest {
 	// Percent decoding.
 
 	// http://#:!:@
-	auto urlString = "http://%23:%21%3A@example.org/%7B/%7D?%3B&%26=%3D#%23hash";
+	auto urlString = "http://%23:%21%3A@example.org/%7B/%7D?%3B&%26=%3D#%23hash%EF%BF%BD";
 	auto url = urlString.parseURL;
 	assert(url.user == "#");
 	assert(url.pass == "!:");
@@ -1035,7 +1035,7 @@ unittest {
 	assert(url.path == "/{/}");
 	assert(url.queryParams[";"].front == "");
 	assert(url.queryParams["&"].front == "=");
-	assert(url.fragment == "#hash");
+	assert(url.fragment == "#hash�");
 
 	// Round trip.
 	assert(urlString == urlString.parseURL.toString, urlString.parseURL.toString);
