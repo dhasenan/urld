@@ -898,6 +898,19 @@ unittest
 
 unittest
 {
+    import std.stdio : writeln;
+    auto url = "file:///foo/bar".parseURL;
+    assert(url.host == null);
+    assert(url.port == 0);
+    assert(url.scheme == "file");
+    assert(url.path == "/foo/bar");
+    assert(url.toString == "file:///foo/bar");
+    assert(url.queryParams.empty);
+    assert(url.fragment == null);
+}
+
+unittest
+{
 	// ipv6 hostnames!
 	{
 		// full range of data
@@ -1403,6 +1416,7 @@ private ubyte fromHex(char s) {
 
 private string toPuny(string unicodeHostname)
 {
+    if (unicodeHostname.length == 0) return "";
     if (unicodeHostname[0] == '[')
     {
         // It's an ipv6 name.
