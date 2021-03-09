@@ -48,6 +48,7 @@ enum ushort[string] schemeToDefaultPort = [
     "dav": 443,
     "dict": 2628,
     "ftp": 21,
+    "gemini": 1965,
     "git": 9418,
     "go": 1096,
     "gopher": 70,
@@ -1739,4 +1740,3 @@ unittest {
 		assert(decodedDomain == "xn--m3h.xn--n3h.com", decodedDomain);
 	}
 }
-
