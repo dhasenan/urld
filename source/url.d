@@ -240,6 +240,11 @@ pure:
 	/// The hostname.
 	string host;
 
+	this(string s)
+	{
+		this = s.parseURL;
+	}
+
 	/**
 	  * The port.
 		*
