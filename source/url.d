@@ -1766,3 +1766,7 @@ unittest {
     assert(u.toHumanReadableString == "http://domain.example/%E9%E9%E9",
             "toHumanReadableString: " ~ u.toHumanReadableString);
 }
+
+unittest {
+	assert(URL("http://example.org") == parseURL("http://example.org"));
+}
