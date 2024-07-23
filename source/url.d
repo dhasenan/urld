@@ -183,10 +183,10 @@ pure:
                 s ~= '&';
             }
             first = false;
-            s ~= tuple.key.percentEncode;
+            s ~= tuple.key.percentEncodeUnicodeOnly;
             if (tuple.value.length > 0) {
                 s ~= '=';
-                s ~= tuple.value.percentEncode;
+                s ~= tuple.value.percentEncodeUnicodeOnly;
             }
         }
         return s.data;
@@ -353,9 +353,9 @@ pure:
         s ~= scheme;
         s ~= "://";
         if (user) {
-            s ~= humanReadable ? user : user.percentEncode;
+            s ~= humanReadable ? user : user.percentEncodeUnicodeOnly;
             s ~= ":";
-            s ~= humanReadable ? pass : pass.percentEncode;
+            s ~= humanReadable ? pass : pass.percentEncodeUnicodeOnly;
             s ~= "@";
         }
         s ~= humanReadable ? host : host.toPuny;
@@ -377,7 +377,7 @@ pure:
                 }
                 foreach (part; p.split('/')) {
                     s ~= '/';
-                    s ~= part.percentEncode;
+                    s ~= part.percentEncodeUnicodeOnly;
                 }
             }
         }
@@ -386,7 +386,11 @@ pure:
             s ~= queryParams.toString;
         }		if (fragment) {
             s ~= '#';
-            s ~= fragment.percentEncode;
+            if (humanReadable) {
+                s ~= fragment;
+            } else {
+                s ~= fragment.percentEncodeUnicodeOnly;
+            }
         }
         return s.data;
 	}
@@ -694,8 +698,8 @@ bool tryParseURL(string value, out URL url)
 		auto j = value.indexOfAny(['@', '/']);
 		if (j > -1 && value[j] == '@') {
 			try {
-				url.user = value[0..i].percentDecode;
-				url.pass = value[i+1 .. j].percentDecode;
+				url.user = value[0..i];
+				url.pass = value[i+1 .. j];
 			} catch (URLException) {
 				return false;
 			}
@@ -758,13 +762,13 @@ private bool parsePathAndQuery(ref URL url, string value)
     auto i = value.indexOfAny("?#");
     if (i == -1)
     {
-        url.path = value.percentDecode;
+        url.path = value;
         return true;
     }
 
     try
     {
-        url.path = value[0..i].percentDecode;
+        url.path = value[0..i];
     }
     catch (URLException)
     {
@@ -803,8 +807,8 @@ private bool parsePathAndQuery(ref URL url, string value)
             }
             try
             {
-                key = key.percentDecode;
-                val = val.percentDecode;
+                key = key;
+                val = val;
             }
             catch (URLException)
             {
@@ -816,7 +820,7 @@ private bool parsePathAndQuery(ref URL url, string value)
 
     try
     {
-        url.fragment = value.percentDecode;
+        url.fragment = value;
     }
     catch (URLException)
     {
@@ -852,13 +856,10 @@ unittest {
 			host = "example.org";
 			path = "/f☃o";
 			queryParams.add("❄", "❀");
-			queryParams.add("[", "]");
 			fragment = "ş";
 		}
 		assert(
-				// Not sure what order it'll come out in.
-				url.toString == "https://example.org/f%E2%98%83o?%E2%9D%84=%E2%9D%80&%5B=%5D#%C5%9F" ||
-				url.toString == "https://example.org/f%E2%98%83o?%5B=%5D&%E2%9D%84=%E2%9D%80#%C5%9F",
+				url.toString == "https://example.org/f%E2%98%83o?%E2%9D%84=%E2%9D%80#%C5%9F",
 				url.toString);
 	}
 	{
@@ -1004,8 +1005,9 @@ unittest {
 		}
 		assert(
 				// Not sure what order it'll come out in.
-				url.toString == "https://example.org/f%E2%98%83o?%E2%9D%84=%E2%9D%80&%5B=%5D#%C5%9F" ||
-				url.toString == "https://example.org/f%E2%98%83o?%5B=%5D&%E2%9D%84=%E2%9D%80#%C5%9F",
+				url.toString ==
+				"https://example.org/f%E2%98%83o?%E2%9D%84=%E2%9D%80&[=]#%C5%9F" ||
+				url.toString == "https://example.org/f%E2%98%83o?[=]&%E2%9D%84=%E2%9D%80#%C5%9F",
 				url.toString);
 	}
 	{
@@ -1037,18 +1039,24 @@ unittest {
 }
 
 unittest {
+    // Percent encoding shouldn't happen until .toString
+    auto url = "http://example.org/á".parseURL;
+    assert(url.path == "/á", url.path);
+}
+
+unittest {
 	// Percent decoding.
 
 	// http://#:!:@
-	auto urlString = "http://%23:%21%3A@example.org/%7B/%7D?%3B&%26=%3D#%23hash%EF%BF%BD";
+	auto urlString = "http://%23:%21%3A@example.org/%7B?%3B&%26=%3D#%23hash";
 	auto url = urlString.parseURL;
-	assert(url.user == "#");
-	assert(url.pass == "!:");
+	assert(url.user == "%23");
+	assert(url.pass == "%21%3A");
 	assert(url.host == "example.org");
-	assert(url.path == "/{/}");
-	assert(url.queryParams[";"].front == "");
-	assert(url.queryParams["&"].front == "=");
-	assert(url.fragment == "#hash�");
+	assert(url.path == "/%7B");
+	assert(url.queryParams["%26"].front == "%3D");
+	assert(url.queryParams["%3B"].front == "");
+	assert(url.fragment == "%23hash");
 
 	// Round trip.
 	assert(urlString == urlString.parseURL.toString, urlString.parseURL.toString);
@@ -1202,8 +1210,8 @@ unittest {
 		assert(u1.host == "example.org");
 		assert(u1.path == "/foo/bar");
 		assert(u1.port == 443);
-		assert(u1.user == "bob!");
-		assert(u1.pass == "secret!?");
+		assert(u1.user == "bob%21");
+		assert(u1.pass == "secret%21%3F");
 	}
 	{
 		// With user and port and path
@@ -1234,15 +1242,6 @@ unittest {
 		assert(u1.queryParams["login"].front == "true");
 		assert(u1.fragment == "justkidding");
 	}
-	{
-		// With URL-encoded values
-		auto u1 = parseURL("https://example.org/%E2%98%83?%E2%9D%84=%3D#%5E");
-		assert(u1.scheme == "https");
-		assert(u1.host == "example.org");
-		assert(u1.path == "/☃", "expected path: /☃ actual path: " ~ u1.path);
-		assert(u1.queryParams["❄"].front == "=");
-		assert(u1.fragment == "^");
-	}
 }
 
 unittest {
@@ -1261,6 +1260,22 @@ unittest {
 }
 
 /**
+	 * Percent-encode non-ASCII characters in a string.
+	 */
+string percentEncodeUnicodeOnly(string raw) {
+	import std.array : Appender;
+	Appender!string app;
+	foreach (char c; raw) {
+		if (cast(ubyte)c >= 0b1000_0000) {
+			app ~= format("%%%02X", cast(ubyte)c);
+		} else {
+			app ~= c;
+		}
+	}
+	return app.data;
+}
+
+/**
 	* Percent-encode a string.
 	*
 	* URL components cannot contain non-ASCII characters, and there are very few characters that are
@@ -1271,8 +1286,8 @@ string percentEncode(string raw) {
 	// We *must* encode these characters: :/?#[]@!$&'()*+,;="
 	// We *can* encode any other characters.
 	// We *should not* encode alpha, numeric, or -._~.
-    import std.utf : encode;
-    import std.array : Appender;
+	import std.utf : encode;
+	import std.array : Appender;
 	Appender!string app;
 	foreach (dchar d; raw) {
 		if (('a' <= d && 'z' >= d) ||
@@ -1329,8 +1344,7 @@ string percentDecode(string encoded)
     }
     catch (UTFException e)
     {
-        throw new URLException(
-                "The percent-encoded data `" ~ encoded ~ "` does not represent a valid UTF-8 sequence.");
+        return encoded;
     }
 	return s;
 }
@@ -1740,3 +1754,10 @@ unittest {
 	}
 }
 
+unittest {
+    // this has percent-encoded non-unicode data
+    auto u = "http://domain.example/%E9%E9%E9".parseURL;
+    assert(u.toString == "http://domain.example/%E9%E9%E9", "toString: " ~ u.toString);
+    assert(u.toHumanReadableString == "http://domain.example/%E9%E9%E9",
+            "toHumanReadableString: " ~ u.toHumanReadableString);
+}
